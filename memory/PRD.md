@@ -56,6 +56,13 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - Checkbox dans le formulaire de création/modification
   - Affichage dans la liste et les détails (vert/orange)
   - Détermine le barème à utiliser pour la facturation
+- ✅ **Contrats CCPA** (Contrat Cadre de Prestations Agricoles)
+  - Page dédiée avec onglet "Contrats" dans la navigation
+  - Création de contrat lié à un chantier
+  - Pré-remplissage automatique des infos client
+  - Champs modifiables : nom, interlocuteur, adresse, email, téléphone, prix, unité
+  - Workflow de statut : Brouillon → Envoyé → Signé
+  - Visualisation du contrat formaté
 - ⏳ Logique de facturation avec minima horaire
 - ⏳ Refonte du portail chauffeur (saisie tours)
 
