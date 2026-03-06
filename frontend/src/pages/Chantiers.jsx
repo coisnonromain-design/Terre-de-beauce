@@ -13,6 +13,10 @@ import {
   Truck,
   Container,
   Eye,
+  Euro,
+  FileText,
+  Droplets,
+  Box,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +58,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -62,6 +67,12 @@ const statusConfig = {
   en_cours: { label: "En cours", class: "bg-green-100 text-green-700 border-green-200" },
   termine: { label: "Terminé", class: "bg-slate-100 text-slate-600 border-slate-200" },
   annule: { label: "Annulé", class: "bg-red-100 text-red-700 border-red-200" },
+};
+
+const methodeLabels = {
+  heure: "À l'heure",
+  tonne: "Au tonnage",
+  journee: "Forfait jour",
 };
 
 export default function Chantiers() {
@@ -79,6 +90,7 @@ export default function Chantiers() {
   const [viewingChantier, setViewingChantier] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [chantierToDelete, setChantierToDelete] = useState(null);
+  const [recapData, setRecapData] = useState(null);
 
   const [form, setForm] = useState({
     reference: "",
@@ -89,6 +101,8 @@ export default function Chantiers() {
     date_fin: "",
     statut: "planifie",
     affectations: [],
+    tarifs: [],
+    transport_type: "solide",
     notes: "",
   });
 
@@ -96,6 +110,12 @@ export default function Chantiers() {
     tracteur_id: "",
     equipement_id: "",
     chauffeur_id: "",
+  });
+
+  const [newTarif, setNewTarif] = useState({
+    methode: "",
+    prix_unitaire: "",
+    description: "",
   });
 
   useEffect(() => {
@@ -140,6 +160,15 @@ export default function Chantiers() {
     }
   };
 
+  const handleClientChange = (clientId) => {
+    setForm({ ...form, client_id: clientId });
+    // Auto-fill tarifs from client
+    const client = clients.find(c => c.id === clientId);
+    if (client?.tarifs && client.tarifs.length > 0 && form.tarifs.length === 0) {
+      setForm(prev => ({ ...prev, client_id: clientId, tarifs: client.tarifs }));
+    }
+  };
+
   const addAffectation = () => {
     if (!newAffectation.tracteur_id || !newAffectation.equipement_id || !newAffectation.chauffeur_id) {
       toast.error("Veuillez sélectionner un tracteur, un équipement et un chauffeur");
@@ -158,6 +187,7 @@ export default function Chantiers() {
           ...newAffectation,
           tracteur_identifiant: tracteur?.identifiant,
           equipement_numero: equipement?.numero,
+          equipement_type: equipement?.type,
           chauffeur_nom: `${chauffeur?.prenom} ${chauffeur?.nom}`,
         },
       ],
@@ -172,6 +202,32 @@ export default function Chantiers() {
     });
   };
 
+  const addTarif = () => {
+    if (!newTarif.methode || !newTarif.prix_unitaire) {
+      toast.error("Veuillez sélectionner une méthode et un prix");
+      return;
+    }
+    setForm({
+      ...form,
+      tarifs: [
+        ...form.tarifs,
+        {
+          methode: newTarif.methode,
+          prix_unitaire: parseFloat(newTarif.prix_unitaire),
+          description: newTarif.description,
+        },
+      ],
+    });
+    setNewTarif({ methode: "", prix_unitaire: "", description: "" });
+  };
+
+  const removeTarif = (index) => {
+    setForm({
+      ...form,
+      tarifs: form.tarifs.filter((_, i) => i !== index),
+    });
+  };
+
   const openEditDialog = (chantier) => {
     setEditingChantier(chantier);
     setForm({
@@ -183,9 +239,23 @@ export default function Chantiers() {
       date_fin: chantier.date_fin || "",
       statut: chantier.statut,
       affectations: chantier.affectations || [],
+      tarifs: chantier.tarifs || [],
+      transport_type: chantier.transport_type || "solide",
       notes: chantier.notes || "",
     });
     setDialogOpen(true);
+  };
+
+  const openDetailDialog = async (chantier) => {
+    setViewingChantier(chantier);
+    // Fetch recap data
+    try {
+      const res = await axios.get(`${API}/chantiers/${chantier.id}/recap`);
+      setRecapData(res.data);
+    } catch (error) {
+      setRecapData(null);
+    }
+    setDetailDialogOpen(true);
   };
 
   const resetForm = () => {
@@ -199,9 +269,12 @@ export default function Chantiers() {
       date_fin: "",
       statut: "planifie",
       affectations: [],
+      tarifs: [],
+      transport_type: "solide",
       notes: "",
     });
     setNewAffectation({ tracteur_id: "", equipement_id: "", chauffeur_id: "" });
+    setNewTarif({ methode: "", prix_unitaire: "", description: "" });
   };
 
   const handleDelete = async () => {
@@ -226,6 +299,14 @@ export default function Chantiers() {
     const matchesStatus = statusFilter === "all" || c.statut === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const getEquipmentIcon = (type) => {
+    switch (type) {
+      case "citerne": return <Droplets className="w-4 h-4 text-blue-600" />;
+      case "benne": return <Box className="w-4 h-4 text-amber-600" />;
+      default: return <Container className="w-4 h-4 text-[#D9A520]" />;
+    }
+  };
 
   if (loading) {
     return (
@@ -306,8 +387,9 @@ export default function Chantiers() {
                   <TableHead>Référence</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Lieu</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Dates</TableHead>
-                  <TableHead>Affectations</TableHead>
+                  <TableHead>Affectation</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead className="w-28">Actions</TableHead>
                 </TableRow>
@@ -326,23 +408,45 @@ export default function Chantiers() {
                       </div>
                     </TableCell>
                     <TableCell>
+                      <Badge variant="outline" className="capitalize">
+                        {chantier.transport_type === "liquide" ? (
+                          <><Droplets className="w-3 h-3 mr-1" /> Liquide</>
+                        ) : (
+                          <><Container className="w-3 h-3 mr-1" /> Solide</>
+                        )}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       <div className="flex items-center gap-1.5 text-sm">
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                         {new Date(chantier.date_debut).toLocaleDateString("fr-FR")}
-                        {chantier.date_fin && (
-                          <span className="text-muted-foreground">
-                            → {new Date(chantier.date_fin).toLocaleDateString("fr-FR")}
-                          </span>
-                        )}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="gap-1">
-                          <Truck className="w-3 h-3" />
-                          {chantier.affectations?.length || 0}
-                        </Badge>
-                      </div>
+                      {chantier.affectations?.length > 0 ? (
+                        <div className="flex items-center gap-1">
+                          {chantier.affectations.slice(0, 1).map((aff, idx) => (
+                            <div key={idx} className="flex items-center gap-1 text-xs">
+                              <Badge variant="outline" className="gap-1">
+                                <Truck className="w-3 h-3" />
+                                {aff.tracteur_identifiant}
+                              </Badge>
+                              <span>+</span>
+                              <Badge variant="outline" className="gap-1">
+                                {getEquipmentIcon(aff.equipement_type)}
+                                {aff.equipement_numero}
+                              </Badge>
+                            </div>
+                          ))}
+                          {chantier.affectations.length > 1 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{chantier.affectations.length - 1}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge className={`${statusConfig[chantier.statut].class} border`}>
@@ -354,10 +458,7 @@ export default function Chantiers() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => {
-                            setViewingChantier(chantier);
-                            setDetailDialogOpen(true);
-                          }}
+                          onClick={() => openDetailDialog(chantier)}
                           data-testid={`view-chantier-${chantier.id}`}
                         >
                           <Eye className="w-4 h-4" />
@@ -417,7 +518,7 @@ export default function Chantiers() {
                   <Label htmlFor="client">Client *</Label>
                   <Select
                     value={form.client_id}
-                    onValueChange={(value) => setForm({ ...form, client_id: value })}
+                    onValueChange={handleClientChange}
                   >
                     <SelectTrigger data-testid="chantier-client-select">
                       <SelectValue placeholder="Sélectionner un client" />
@@ -433,15 +534,40 @@ export default function Chantiers() {
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="lieu">Lieu du chantier *</Label>
-                <Input
-                  id="lieu"
-                  value={form.lieu}
-                  onChange={(e) => setForm({ ...form, lieu: e.target.value })}
-                  placeholder="Adresse ou lieu-dit"
-                  data-testid="chantier-lieu-input"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="lieu">Lieu du chantier *</Label>
+                  <Input
+                    id="lieu"
+                    value={form.lieu}
+                    onChange={(e) => setForm({ ...form, lieu: e.target.value })}
+                    placeholder="Adresse ou lieu-dit"
+                    data-testid="chantier-lieu-input"
+                  />
+                </div>
+                <div>
+                  <Label>Type de transport</Label>
+                  <Select
+                    value={form.transport_type}
+                    onValueChange={(value) => setForm({ ...form, transport_type: value })}
+                  >
+                    <SelectTrigger data-testid="chantier-transport-type-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="solide">
+                        <div className="flex items-center gap-2">
+                          <Container className="w-4 h-4" /> Solide (remorque/benne)
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="liquide">
+                        <div className="flex items-center gap-2">
+                          <Droplets className="w-4 h-4" /> Liquide (citerne)
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               <div>
@@ -495,14 +621,13 @@ export default function Chantiers() {
                 </div>
               </div>
 
-              {/* Affectations */}
+              {/* Affectation */}
               <Separator className="my-2" />
               <div className="space-y-4">
                 <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                  Affectations (Tracteur + Équipement + Chauffeur)
+                  Affectation (Tracteur + Équipement + Chauffeur)
                 </h3>
 
-                {/* Liste des affectations */}
                 {form.affectations.length > 0 && (
                   <div className="space-y-2">
                     {form.affectations.map((aff, index) => (
@@ -517,7 +642,7 @@ export default function Chantiers() {
                           </div>
                           <span className="text-muted-foreground">+</span>
                           <div className="flex items-center gap-1.5">
-                            <Container className="w-4 h-4 text-[#D9A520]" />
+                            {getEquipmentIcon(aff.equipement_type)}
                             <span className="font-medium">{aff.equipement_numero}</span>
                           </div>
                           <span className="text-muted-foreground">+</span>
@@ -539,7 +664,6 @@ export default function Chantiers() {
                   </div>
                 )}
 
-                {/* Ajouter une affectation */}
                 <div className="grid grid-cols-4 gap-2 items-end">
                   <div>
                     <Label>Tracteur</Label>
@@ -612,6 +736,91 @@ export default function Chantiers() {
                 </div>
               </div>
 
+              {/* Tarification */}
+              <Separator className="my-2" />
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Euro className="w-4 h-4" />
+                  Tarification du chantier
+                </h3>
+
+                {form.tarifs.length > 0 && (
+                  <div className="space-y-2">
+                    {form.tarifs.map((tarif, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div>
+                          <span className="font-medium">{methodeLabels[tarif.methode]}</span>
+                          <span className="mx-2">•</span>
+                          <span className="text-[#1A4D2E] font-bold">{tarif.prix_unitaire} €</span>
+                          {tarif.description && (
+                            <span className="text-muted-foreground text-sm ml-2">
+                              ({tarif.description})
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeTarif(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-4 gap-2 items-end">
+                  <div>
+                    <Label>Méthode</Label>
+                    <Select
+                      value={newTarif.methode}
+                      onValueChange={(value) => setNewTarif({ ...newTarif, methode: value })}
+                    >
+                      <SelectTrigger data-testid="tarif-methode-select">
+                        <SelectValue placeholder="Méthode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="heure">À l'heure (€/h)</SelectItem>
+                        <SelectItem value="tonne">Au tonnage (€/T)</SelectItem>
+                        <SelectItem value="journee">Forfait jour (€/j)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Prix (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={newTarif.prix_unitaire}
+                      onChange={(e) => setNewTarif({ ...newTarif, prix_unitaire: e.target.value })}
+                      placeholder="0.00"
+                      data-testid="tarif-prix-input"
+                    />
+                  </div>
+                  <div>
+                    <Label>Description</Label>
+                    <Input
+                      value={newTarif.description}
+                      onChange={(e) => setNewTarif({ ...newTarif, description: e.target.value })}
+                      placeholder="Optionnel"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={addTarif}
+                    data-testid="add-tarif-btn"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
               <div>
                 <Label htmlFor="notes">Notes</Label>
                 <Textarea
@@ -641,73 +850,164 @@ export default function Chantiers() {
 
       {/* Chantier Detail Dialog */}
       <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="font-['Barlow_Condensed'] text-2xl">
               {viewingChantier?.reference}
             </DialogTitle>
           </DialogHeader>
           {viewingChantier && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Client</span>
-                <span className="font-medium">{viewingChantier.client_nom || "-"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Lieu</span>
-                <span className="font-medium">{viewingChantier.lieu}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Dates</span>
-                <span className="font-medium">
-                  {new Date(viewingChantier.date_debut).toLocaleDateString("fr-FR")}
-                  {viewingChantier.date_fin &&
-                    ` → ${new Date(viewingChantier.date_fin).toLocaleDateString("fr-FR")}`}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Statut</span>
-                <Badge className={`${statusConfig[viewingChantier.statut].class} border`}>
-                  {statusConfig[viewingChantier.statut].label}
-                </Badge>
-              </div>
+            <Tabs defaultValue="details">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="details">Détails</TabsTrigger>
+                <TabsTrigger value="recap">Récapitulatif</TabsTrigger>
+              </TabsList>
               
-              {viewingChantier.description && (
-                <div>
-                  <span className="text-muted-foreground block mb-1">Description</span>
-                  <p className="text-sm">{viewingChantier.description}</p>
-                </div>
-              )}
-
-              {viewingChantier.affectations?.length > 0 && (
-                <div>
-                  <span className="text-muted-foreground block mb-2">Affectations</span>
-                  <div className="space-y-2">
-                    {viewingChantier.affectations.map((aff, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-3 p-2 bg-muted/50 rounded"
-                      >
-                        <div className="flex items-center gap-1">
-                          <Truck className="w-4 h-4 text-[#1A4D2E]" />
-                          <span className="font-medium">{aff.tracteur_identifiant}</span>
-                        </div>
-                        <span className="text-muted-foreground">+</span>
-                        <div className="flex items-center gap-1">
-                          <Container className="w-4 h-4 text-[#D9A520]" />
-                          <span className="font-medium">{aff.equipement_numero}</span>
-                        </div>
-                        <span className="text-muted-foreground">+</span>
-                        <div className="flex items-center gap-1">
-                          <Users className="w-4 h-4 text-slate-600" />
-                          <span className="font-medium">{aff.chauffeur_nom}</span>
-                        </div>
-                      </div>
-                    ))}
+              <TabsContent value="details" className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-muted-foreground text-sm">Client</span>
+                    <p className="font-medium">{viewingChantier.client_nom || "-"}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-sm">Lieu</span>
+                    <p className="font-medium">{viewingChantier.lieu}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-sm">Dates</span>
+                    <p className="font-medium">
+                      {new Date(viewingChantier.date_debut).toLocaleDateString("fr-FR")}
+                      {viewingChantier.date_fin &&
+                        ` → ${new Date(viewingChantier.date_fin).toLocaleDateString("fr-FR")}`}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground text-sm">Statut</span>
+                    <div className="mt-1">
+                      <Badge className={`${statusConfig[viewingChantier.statut].class} border`}>
+                        {statusConfig[viewingChantier.statut].label}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
+
+                {viewingChantier.tarifs?.length > 0 && (
+                  <div>
+                    <span className="text-muted-foreground text-sm block mb-2">Tarification</span>
+                    <div className="flex flex-wrap gap-2">
+                      {viewingChantier.tarifs.map((tarif, idx) => (
+                        <Badge key={idx} variant="outline" className="text-sm">
+                          {methodeLabels[tarif.methode]}: {tarif.prix_unitaire}€
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {viewingChantier.affectations?.length > 0 && (
+                  <div>
+                    <span className="text-muted-foreground text-sm block mb-2">Affectations</span>
+                    <div className="space-y-2">
+                      {viewingChantier.affectations.map((aff, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-3 p-2 bg-muted/50 rounded"
+                        >
+                          <div className="flex items-center gap-1">
+                            <Truck className="w-4 h-4 text-[#1A4D2E]" />
+                            <span className="font-medium">{aff.tracteur_identifiant}</span>
+                          </div>
+                          <span className="text-muted-foreground">+</span>
+                          <div className="flex items-center gap-1">
+                            {getEquipmentIcon(aff.equipement_type)}
+                            <span className="font-medium">{aff.equipement_numero}</span>
+                          </div>
+                          <span className="text-muted-foreground">+</span>
+                          <div className="flex items-center gap-1">
+                            <Users className="w-4 h-4 text-slate-600" />
+                            <span className="font-medium">{aff.chauffeur_nom}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="recap" className="space-y-4 mt-4">
+                {recapData ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-4">
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <p className="text-2xl font-bold font-['Barlow_Condensed']">
+                            {recapData.total_heures?.toFixed(1)}h
+                          </p>
+                          <p className="text-sm text-muted-foreground">Heures</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <p className="text-2xl font-bold font-['Barlow_Condensed']">
+                            {recapData.total_tonnage?.toFixed(1)}T
+                          </p>
+                          <p className="text-sm text-muted-foreground">Tonnage</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4 text-center">
+                          <p className="text-2xl font-bold font-['Barlow_Condensed']">
+                            {recapData.nombre_jours}
+                          </p>
+                          <p className="text-sm text-muted-foreground">Jours</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {recapData.lignes_facture?.length > 0 && (
+                      <div className="p-4 bg-muted/30 rounded-lg">
+                        <h4 className="font-semibold mb-3 flex items-center gap-2">
+                          <FileText className="w-4 h-4" />
+                          Estimation facturation
+                        </h4>
+                        <div className="space-y-2">
+                          {recapData.lignes_facture.map((ligne, idx) => (
+                            <div key={idx} className="flex justify-between text-sm">
+                              <span>{ligne.description}</span>
+                              <span className="font-medium">{ligne.montant_ht?.toFixed(2)} €</span>
+                            </div>
+                          ))}
+                          <Separator />
+                          <div className="flex justify-between font-bold">
+                            <span>Total HT</span>
+                            <span className="text-[#1A4D2E]">{recapData.montant_ht?.toFixed(2)} €</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-muted-foreground">
+                            <span>TVA (20%)</span>
+                            <span>{recapData.montant_tva?.toFixed(2)} €</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-lg">
+                            <span>Total TTC</span>
+                            <span className="text-[#1A4D2E]">{recapData.montant_ttc?.toFixed(2)} €</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {recapData.pointages?.length === 0 && (
+                      <div className="text-center text-muted-foreground py-8">
+                        <p>Aucun pointage enregistré pour ce chantier</p>
+                        <p className="text-sm">Les chauffeurs peuvent saisir leurs heures via le portail chauffeur</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Chargement du récapitulatif...
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           )}
         </DialogContent>
       </Dialog>
