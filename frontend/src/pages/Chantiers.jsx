@@ -413,13 +413,19 @@ export default function Chantiers() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="capitalize">
-                        {chantier.transport_type === "liquide" ? (
-                          <><Droplets className="w-3 h-3 mr-1" /> Liquide</>
-                        ) : (
-                          <><Container className="w-3 h-3 mr-1" /> Solide</>
-                        )}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant="outline" className="capitalize w-fit">
+                          {chantier.transport_type === "liquide" ? (
+                            <><Droplets className="w-3 h-3 mr-1" /> Liquide</>
+                          ) : (
+                            <><Container className="w-3 h-3 mr-1" /> Solide</>
+                          )}
+                        </Badge>
+                        <span className={`text-xs flex items-center gap-1 ${chantier.avec_gasoil !== false ? 'text-green-600' : 'text-orange-600'}`}>
+                          <Fuel className="w-3 h-3" />
+                          {chantier.avec_gasoil !== false ? "Gasoil fourni" : "Sans gasoil"}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-sm">
