@@ -11,10 +11,12 @@ import {
   Mail,
   MapPin,
   FileText,
+  Euro,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +24,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -43,8 +52,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+const methodeLabels = {
+  heure: "À l'heure (€/h)",
+  tonne: "Au tonnage (€/T)",
+  journee: "Forfait journalier (€/jour)",
+};
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
@@ -68,7 +84,14 @@ export default function Clients() {
     email: "",
     contact_nom: "",
     contact_telephone: "",
+    tarifs: [],
     notes: "",
+  });
+
+  const [newTarif, setNewTarif] = useState({
+    methode: "",
+    prix_unitaire: "",
+    description: "",
   });
 
   useEffect(() => {
@@ -103,6 +126,32 @@ export default function Clients() {
     }
   };
 
+  const addTarif = () => {
+    if (!newTarif.methode || !newTarif.prix_unitaire) {
+      toast.error("Veuillez sélectionner une méthode et un prix");
+      return;
+    }
+    setForm({
+      ...form,
+      tarifs: [
+        ...form.tarifs,
+        {
+          methode: newTarif.methode,
+          prix_unitaire: parseFloat(newTarif.prix_unitaire),
+          description: newTarif.description,
+        },
+      ],
+    });
+    setNewTarif({ methode: "", prix_unitaire: "", description: "" });
+  };
+
+  const removeTarif = (index) => {
+    setForm({
+      ...form,
+      tarifs: form.tarifs.filter((_, i) => i !== index),
+    });
+  };
+
   const openEditDialog = (client) => {
     setEditingClient(client);
     setForm({
@@ -118,6 +167,7 @@ export default function Clients() {
       email: client.email || "",
       contact_nom: client.contact_nom || "",
       contact_telephone: client.contact_telephone || "",
+      tarifs: client.tarifs || [],
       notes: client.notes || "",
     });
     setDialogOpen(true);
@@ -138,8 +188,10 @@ export default function Clients() {
       email: "",
       contact_nom: "",
       contact_telephone: "",
+      tarifs: [],
       notes: "",
     });
+    setNewTarif({ methode: "", prix_unitaire: "", description: "" });
   };
 
   const handleDelete = async () => {
@@ -229,6 +281,7 @@ export default function Clients() {
                   <TableHead>Raison sociale</TableHead>
                   <TableHead>SIRET</TableHead>
                   <TableHead>Adresse</TableHead>
+                  <TableHead>Tarification</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead className="w-24">Actions</TableHead>
                 </TableRow>
@@ -276,6 +329,19 @@ export default function Clients() {
                           </p>
                         </div>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {client.tarifs && client.tarifs.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {client.tarifs.map((tarif, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {tarif.prix_unitaire}€/{tarif.methode === "heure" ? "h" : tarif.methode === "tonne" ? "T" : "j"}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Non définie</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
@@ -485,6 +551,96 @@ export default function Clients() {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Tarification */}
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Euro className="w-4 h-4" />
+                  Tarification par défaut
+                </h3>
+                
+                {/* Tarifs existants */}
+                {form.tarifs.length > 0 && (
+                  <div className="space-y-2">
+                    {form.tarifs.map((tarif, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div>
+                          <span className="font-medium">{methodeLabels[tarif.methode]}</span>
+                          <span className="mx-2">•</span>
+                          <span className="text-[#1A4D2E] font-bold">{tarif.prix_unitaire} €</span>
+                          {tarif.description && (
+                            <span className="text-muted-foreground text-sm ml-2">
+                              ({tarif.description})
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeTarif(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Ajouter un tarif */}
+                <div className="grid grid-cols-4 gap-2 items-end">
+                  <div>
+                    <Label>Méthode</Label>
+                    <Select
+                      value={newTarif.methode}
+                      onValueChange={(value) => setNewTarif({ ...newTarif, methode: value })}
+                    >
+                      <SelectTrigger data-testid="tarif-methode-select">
+                        <SelectValue placeholder="Méthode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="heure">À l'heure</SelectItem>
+                        <SelectItem value="tonne">Au tonnage</SelectItem>
+                        <SelectItem value="journee">Forfait jour</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Prix (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={newTarif.prix_unitaire}
+                      onChange={(e) => setNewTarif({ ...newTarif, prix_unitaire: e.target.value })}
+                      placeholder="0.00"
+                      data-testid="tarif-prix-input"
+                    />
+                  </div>
+                  <div>
+                    <Label>Description</Label>
+                    <Input
+                      value={newTarif.description}
+                      onChange={(e) => setNewTarif({ ...newTarif, description: e.target.value })}
+                      placeholder="Optionnel"
+                      data-testid="tarif-description-input"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={addTarif}
+                    data-testid="add-tarif-btn"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Ces tarifs seront appliqués par défaut aux nouveaux chantiers pour ce client
+                </p>
               </div>
 
               {/* Notes */}
