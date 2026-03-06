@@ -97,6 +97,7 @@ export default function Factures() {
   const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
   const [signatureForm, setSignatureForm] = useState({ email: "", name: "" });
   const [sendingSignature, setSendingSignature] = useState(false);
+  const [syncingStatus, setSyncingStatus] = useState(false);
 
   const [form, setForm] = useState({
     chantier_id: "",
