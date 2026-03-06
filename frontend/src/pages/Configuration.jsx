@@ -6,14 +6,70 @@ import {
   Building2,
   Save,
   CreditCard,
+  TruckIcon,
+  Droplets,
+  Fuel,
+  FuelOff,
+  Clock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Composant pour afficher et éditer un barème
+function BaremeEditor({ bareme, onChange, unite }) {
+  const handlePriceChange = (index, value) => {
+    const newTranches = [...bareme.tranches];
+    newTranches[index] = {
+      ...newTranches[index],
+      prix_tonne_km: parseFloat(value) || 0,
+    };
+    onChange({ ...bareme, tranches: newTranches });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide px-1">
+        <div className="col-span-4">Distance (km)</div>
+        <div className="col-span-8">Prix par {unite}</div>
+      </div>
+      <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+        {bareme.tranches.map((tranche, index) => (
+          <div
+            key={index}
+            className="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-lg p-2"
+          >
+            <div className="col-span-4 text-sm font-medium">
+              {tranche.km_min.toFixed(1)} - {tranche.km_max.toFixed(1)} km
+            </div>
+            <div className="col-span-8">
+              <div className="relative">
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={tranche.prix_tonne_km || ""}
+                  onChange={(e) => handlePriceChange(index, e.target.value)}
+                  className="pr-8 h-9"
+                  placeholder="0.00"
+                  data-testid={`bareme-price-${index}`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  €
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Configuration() {
   const [config, setConfig] = useState({
@@ -30,11 +86,15 @@ export default function Configuration() {
     iban: "",
     bic: "",
   });
+  const [baremes, setBaremes] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingBaremes, setSavingBaremes] = useState(false);
+  const [activeBaremeTab, setActiveBaremeTab] = useState("solide_avec_gasoil");
 
   useEffect(() => {
     fetchConfig();
+    fetchBaremes();
   }, []);
 
   const fetchConfig = async () => {
@@ -45,6 +105,16 @@ export default function Configuration() {
       toast.error("Erreur lors du chargement de la configuration");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchBaremes = async () => {
+    try {
+      const res = await axios.get(`${API}/config/baremes`);
+      setBaremes(res.data);
+    } catch (error) {
+      console.error("Erreur chargement barèmes:", error);
+      toast.error("Erreur lors du chargement des barèmes");
     }
   };
 
@@ -60,6 +130,31 @@ export default function Configuration() {
     }
   };
 
+  const handleSaveBaremes = async () => {
+    setSavingBaremes(true);
+    try {
+      await axios.put(`${API}/config/baremes`, {
+        solide_avec_gasoil: baremes.solide_avec_gasoil,
+        solide_sans_gasoil: baremes.solide_sans_gasoil,
+        liquide_avec_gasoil: baremes.liquide_avec_gasoil,
+        liquide_sans_gasoil: baremes.liquide_sans_gasoil,
+        taux_horaire_minimum: baremes.taux_horaire_minimum,
+      });
+      toast.success("Barèmes enregistrés");
+    } catch (error) {
+      toast.error("Erreur lors de l'enregistrement des barèmes");
+    } finally {
+      setSavingBaremes(false);
+    }
+  };
+
+  const updateBareme = (type, newBareme) => {
+    setBaremes((prev) => ({
+      ...prev,
+      [type]: newBareme,
+    }));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -67,6 +162,37 @@ export default function Configuration() {
       </div>
     );
   }
+
+  const baremeTabInfo = {
+    solide_avec_gasoil: {
+      label: "Solide + Gasoil",
+      icon: <TruckIcon className="w-4 h-4" />,
+      iconFuel: <Fuel className="w-4 h-4 text-green-600" />,
+      description: "Transport de matières solides (céréales, etc.) avec gasoil fourni",
+      unite: "tonne",
+    },
+    solide_sans_gasoil: {
+      label: "Solide sans Gasoil",
+      icon: <TruckIcon className="w-4 h-4" />,
+      iconFuel: <FuelOff className="w-4 h-4 text-orange-500" />,
+      description: "Transport de matières solides sans gasoil fourni",
+      unite: "tonne",
+    },
+    liquide_avec_gasoil: {
+      label: "Liquide + Gasoil",
+      icon: <Droplets className="w-4 h-4" />,
+      iconFuel: <Fuel className="w-4 h-4 text-green-600" />,
+      description: "Transport de liquides (engrais, etc.) avec gasoil fourni",
+      unite: "m³",
+    },
+    liquide_sans_gasoil: {
+      label: "Liquide sans Gasoil",
+      icon: <Droplets className="w-4 h-4" />,
+      iconFuel: <FuelOff className="w-4 h-4 text-orange-500" />,
+      description: "Transport de liquides sans gasoil fourni",
+      unite: "m³",
+    },
+  };
 
   return (
     <div className="space-y-6" data-testid="configuration-page">
@@ -242,6 +368,108 @@ export default function Configuration() {
         </CardContent>
       </Card>
 
+      {/* Barèmes Kilométriques */}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-xl font-['Barlow_Condensed'] flex items-center gap-2">
+            <TruckIcon className="w-5 h-5 text-[#D9A520]" />
+            Barèmes Kilométriques
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          {baremes ? (
+            <div className="space-y-6">
+              {/* Taux horaire minimum */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="w-5 h-5 text-amber-600" />
+                  <h4 className="font-semibold text-amber-800">Taux Horaire Minimum</h4>
+                </div>
+                <p className="text-sm text-amber-700 mb-3">
+                  Si le montant facturé au volume pour une journée est inférieur à ce seuil, 
+                  la facturation basculera automatiquement sur le tarif horaire.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Label className="text-amber-800 whitespace-nowrap">Taux minimum :</Label>
+                  <div className="relative w-40">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={baremes.taux_horaire_minimum || ""}
+                      onChange={(e) =>
+                        setBaremes({
+                          ...baremes,
+                          taux_horaire_minimum: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="pr-12"
+                      placeholder="0.00"
+                      data-testid="taux-horaire-minimum-input"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      €/h
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabs pour les 4 barèmes */}
+              <Tabs value={activeBaremeTab} onValueChange={setActiveBaremeTab}>
+                <TabsList className="grid grid-cols-4 mb-4">
+                  {Object.entries(baremeTabInfo).map(([key, info]) => (
+                    <TabsTrigger
+                      key={key}
+                      value={key}
+                      className="flex items-center gap-1 text-xs sm:text-sm"
+                      data-testid={`bareme-tab-${key}`}
+                    >
+                      {info.icon}
+                      {info.iconFuel}
+                      <span className="hidden sm:inline">{info.label}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {Object.entries(baremeTabInfo).map(([key, info]) => (
+                  <TabsContent key={key} value={key}>
+                    <div className="bg-slate-50/50 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-muted-foreground">{info.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Tranches de 2,5 km jusqu'à 50 km • Tarifs en € par {info.unite}
+                      </p>
+                    </div>
+                    {baremes[key] && (
+                      <BaremeEditor
+                        bareme={baremes[key]}
+                        onChange={(newBareme) => updateBareme(key, newBareme)}
+                        unite={info.unite}
+                      />
+                    )}
+                  </TabsContent>
+                ))}
+              </Tabs>
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button
+                  onClick={handleSaveBaremes}
+                  disabled={savingBaremes}
+                  className="bg-[#1A4D2E] hover:bg-[#143d24]"
+                  data-testid="save-baremes-btn"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {savingBaremes ? "Enregistrement..." : "Enregistrer les barèmes"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1A4D2E]"></div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* DocuSign Info */}
       <Card>
         <CardHeader className="border-b">
@@ -251,26 +479,11 @@ export default function Configuration() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-amber-800 font-medium">Configuration en attente</p>
-            <p className="text-sm text-amber-700 mt-1">
-              Pour activer la signature électronique des contrats et factures, 
-              vous devez fournir vos clés API DocuSign :
-            </p>
-            <ul className="text-sm text-amber-700 mt-2 list-disc list-inside space-y-1">
-              <li>Integration Key (Client ID)</li>
-              <li>Secret Key</li>
-            </ul>
-            <p className="text-sm text-amber-700 mt-2">
-              Créez votre compte développeur sur{" "}
-              <a
-                href="https://developers.docusign.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline font-medium"
-              >
-                developers.docusign.com
-              </a>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <p className="text-green-800 font-medium">DocuSign configuré</p>
+            <p className="text-sm text-green-700 mt-1">
+              L'intégration DocuSign est active. Vous pouvez envoyer des factures 
+              pour signature électronique depuis la page Factures.
             </p>
           </div>
         </CardContent>
