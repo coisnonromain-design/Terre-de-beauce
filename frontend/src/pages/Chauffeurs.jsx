@@ -219,6 +219,7 @@ export default function Chauffeurs() {
                   <TableHead>Contact</TableHead>
                   <TableHead>Permis</TableHead>
                   <TableHead>Embauche</TableHead>
+                  <TableHead>Code accès</TableHead>
                   <TableHead>Disponibilité</TableHead>
                   <TableHead className="w-24">Actions</TableHead>
                 </TableRow>
