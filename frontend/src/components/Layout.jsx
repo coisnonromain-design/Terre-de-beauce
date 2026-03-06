@@ -26,6 +26,7 @@ const navigation = [
   { name: "Planning", href: "/planning", icon: CalendarDays },
   { name: "Pointages", href: "/pointages", icon: ClipboardList },
   { name: "Factures", href: "/factures", icon: FileText },
+  { name: "Contrats", href: "/contrats", icon: FileSignature },
 ];
 
 const getPageTitle = (pathname) => {
