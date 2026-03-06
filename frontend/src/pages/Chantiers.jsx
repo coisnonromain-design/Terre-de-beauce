@@ -575,6 +575,30 @@ export default function Chantiers() {
                 </div>
               </div>
 
+              {/* Option Gasoil */}
+              <div className="flex items-center space-x-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <Checkbox
+                  id="avec_gasoil"
+                  checked={form.avec_gasoil}
+                  onCheckedChange={(checked) => setForm({ ...form, avec_gasoil: checked })}
+                  data-testid="chantier-gasoil-checkbox"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <label
+                    htmlFor="avec_gasoil"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+                  >
+                    <Fuel className="w-4 h-4 text-amber-600" />
+                    Gasoil fourni par l'entreprise
+                  </label>
+                  <p className="text-sm text-muted-foreground">
+                    {form.avec_gasoil 
+                      ? "Le barème 'avec gasoil' sera utilisé pour la facturation" 
+                      : "Le barème 'sans gasoil' sera utilisé pour la facturation"}
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <Label htmlFor="description">Description</Label>
                 <Textarea
