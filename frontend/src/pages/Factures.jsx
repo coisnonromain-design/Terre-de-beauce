@@ -325,8 +325,20 @@ export default function Factures() {
               <SelectItem value="envoyee">Envoyée</SelectItem>
               <SelectItem value="signee">Signée</SelectItem>
               <SelectItem value="payee">Payée</SelectItem>
+              <SelectItem value="annulee">Annulée</SelectItem>
             </SelectContent>
           </Select>
+          {docusignStatus?.authenticated && (
+            <Button
+              variant="outline"
+              onClick={syncAllStatuses}
+              disabled={syncingStatus}
+              data-testid="sync-all-docusign-btn"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncingStatus ? 'animate-spin' : ''}`} />
+              Sync DocuSign
+            </Button>
+          )}
           <Button
             onClick={() => setDialogOpen(true)}
             className="bg-[#1A4D2E] hover:bg-[#143d24]"
