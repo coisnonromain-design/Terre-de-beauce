@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,8 +9,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from enum import Enum
+import io
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -42,11 +44,65 @@ class ChantierStatus(str, Enum):
     TERMINE = "termine"
     ANNULE = "annule"
 
+class MethodeFacturation(str, Enum):
+    HEURE = "heure"
+    TONNE = "tonne"
+    JOURNEE = "journee"
+
+class FactureStatus(str, Enum):
+    BROUILLON = "brouillon"
+    EMISE = "emise"
+    ENVOYEE = "envoyee"
+    SIGNEE = "signee"
+    PAYEE = "payee"
+
+class ContratStatus(str, Enum):
+    BROUILLON = "brouillon"
+    ENVOYE = "envoye"
+    SIGNE = "signe"
+    ANNULE = "annule"
+
+class TransportType(str, Enum):
+    SOLIDE = "solide"
+    LIQUIDE = "liquide"
+
 # ============= MODELS =============
+
+# Configuration Entreprise
+class EntrepriseConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = "config_entreprise"
+    raison_sociale: str = "Terre de Beauce"
+    adresse: str = "Ferme de Mennessard"
+    code_postal: str = "91660"
+    ville: str = "Le Mérévillois"
+    pays: str = "France"
+    siren: str = "953286333"
+    siret: str = "95328633300018"
+    tva_intracommunautaire: str = "FR57953286333"
+    email: str = "r.coisnon@terredebeauce.com"
+    telephone: Optional[str] = None
+    iban: Optional[str] = None
+    bic: Optional[str] = None
+    logo_url: Optional[str] = None
+
+class EntrepriseConfigUpdate(BaseModel):
+    raison_sociale: Optional[str] = None
+    adresse: Optional[str] = None
+    code_postal: Optional[str] = None
+    ville: Optional[str] = None
+    pays: Optional[str] = None
+    siren: Optional[str] = None
+    siret: Optional[str] = None
+    tva_intracommunautaire: Optional[str] = None
+    email: Optional[str] = None
+    telephone: Optional[str] = None
+    iban: Optional[str] = None
+    bic: Optional[str] = None
 
 # Tracteurs
 class TracteurBase(BaseModel):
-    identifiant: str  # Lettre (A, B, C, etc.)
+    identifiant: str
     marque: str
     modele: str
     immatriculation: str
@@ -64,7 +120,7 @@ class Tracteur(TracteurBase):
 
 # Equipements (Remorques, Citernes, Bennes)
 class EquipementBase(BaseModel):
-    numero: str  # Numéro d'identification
+    numero: str
     type: EquipmentType
     capacite: Optional[str] = None
     marque: Optional[str] = None
@@ -89,6 +145,7 @@ class ChauffeurBase(BaseModel):
     permis: str
     date_embauche: Optional[str] = None
     disponible: bool = True
+    code_acces: Optional[str] = None  # Code pour accès chauffeur
     notes: Optional[str] = None
 
 class ChauffeurCreate(ChauffeurBase):
@@ -99,7 +156,12 @@ class Chauffeur(ChauffeurBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# Clients
+# Tarification Client
+class TarifClient(BaseModel):
+    methode: MethodeFacturation
+    prix_unitaire: float  # €/h, €/tonne ou €/jour
+    description: Optional[str] = None
+
 class ClientBase(BaseModel):
     raison_sociale: str
     siren: Optional[str] = None
@@ -113,6 +175,8 @@ class ClientBase(BaseModel):
     email: Optional[str] = None
     contact_nom: Optional[str] = None
     contact_telephone: Optional[str] = None
+    # Tarification
+    tarifs: List[TarifClient] = []
     notes: Optional[str] = None
 
 class ClientCreate(ClientBase):
@@ -123,14 +187,21 @@ class Client(ClientBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# Affectation (pour un chantier)
+# Affectation (pour un chantier) - Simplifiée
 class Affectation(BaseModel):
     tracteur_id: str
     tracteur_identifiant: Optional[str] = None
     equipement_id: str
     equipement_numero: Optional[str] = None
+    equipement_type: Optional[str] = None
     chauffeur_id: str
     chauffeur_nom: Optional[str] = None
+
+# Tarification Chantier
+class TarifChantier(BaseModel):
+    methode: MethodeFacturation
+    prix_unitaire: float
+    description: Optional[str] = None
 
 # Chantiers
 class ChantierBase(BaseModel):
@@ -143,12 +214,104 @@ class ChantierBase(BaseModel):
     date_fin: Optional[str] = None
     statut: ChantierStatus = ChantierStatus.PLANIFIE
     affectations: List[Affectation] = []
+    # Tarification du chantier
+    tarifs: List[TarifChantier] = []
+    transport_type: TransportType = TransportType.SOLIDE
     notes: Optional[str] = None
 
 class ChantierCreate(ChantierBase):
     pass
 
 class Chantier(ChantierBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Pointage Chauffeur (Saisie heures et volumes)
+class PointageBase(BaseModel):
+    chantier_id: str
+    chauffeur_id: str
+    date: str  # YYYY-MM-DD
+    heures_travaillees: float = 0
+    tonnage_transporte: float = 0
+    nombre_rotations: int = 0
+    commentaire: Optional[str] = None
+
+class PointageCreate(PointageBase):
+    pass
+
+class Pointage(PointageBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    chantier_reference: Optional[str] = None
+    chauffeur_nom: Optional[str] = None
+    client_nom: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Ligne de facture
+class LigneFacture(BaseModel):
+    description: str
+    quantite: float
+    unite: str  # "heures", "tonnes", "jours"
+    prix_unitaire: float
+    montant_ht: float
+
+# Facture
+class FactureBase(BaseModel):
+    chantier_id: str
+    client_id: str
+    numero: str
+    date_emission: str
+    date_echeance: str
+    lignes: List[LigneFacture] = []
+    montant_ht: float = 0
+    taux_tva: float = 20.0
+    montant_tva: float = 0
+    montant_ttc: float = 0
+    statut: FactureStatus = FactureStatus.BROUILLON
+    notes: Optional[str] = None
+    # Infos pour PDF
+    client_raison_sociale: Optional[str] = None
+    client_adresse: Optional[str] = None
+    client_siret: Optional[str] = None
+    client_tva: Optional[str] = None
+    chantier_reference: Optional[str] = None
+    chantier_lieu: Optional[str] = None
+
+class FactureCreate(BaseModel):
+    chantier_id: str
+    date_echeance: str
+    notes: Optional[str] = None
+
+class Facture(FactureBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Contrat de transport
+class ContratBase(BaseModel):
+    client_id: str
+    type_transport: TransportType
+    reference: str
+    date_creation: str
+    conditions: Optional[str] = None
+    statut: ContratStatus = ContratStatus.BROUILLON
+    # Infos client
+    client_raison_sociale: Optional[str] = None
+    client_adresse: Optional[str] = None
+    client_siret: Optional[str] = None
+    client_email: Optional[str] = None
+    # Signature
+    docusign_envelope_id: Optional[str] = None
+    date_signature: Optional[str] = None
+
+class ContratCreate(BaseModel):
+    client_id: str
+    type_transport: TransportType
+    conditions: Optional[str] = None
+
+class Contrat(ContratBase):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -164,15 +327,58 @@ class DashboardStats(BaseModel):
     total_clients: int
     chantiers_en_cours: int
     chantiers_planifies: int
+    factures_en_attente: int = 0
+    ca_mois: float = 0
+
+# Auth Chauffeur
+class ChauffeurLogin(BaseModel):
+    code_acces: str
+
+class ChauffeurSession(BaseModel):
+    chauffeur_id: str
+    chauffeur_nom: str
+    token: str
 
 # ============= HELPER FUNCTIONS =============
 def serialize_doc(doc: dict) -> dict:
-    """Remove MongoDB _id and convert datetime to ISO string"""
     if '_id' in doc:
         del doc['_id']
     if 'created_at' in doc and isinstance(doc['created_at'], datetime):
         doc['created_at'] = doc['created_at'].isoformat()
+    if 'updated_at' in doc and isinstance(doc['updated_at'], datetime):
+        doc['updated_at'] = doc['updated_at'].isoformat()
     return doc
+
+def generate_numero_facture():
+    now = datetime.now()
+    return f"FAC-{now.year}-{now.month:02d}-{str(uuid.uuid4())[:8].upper()}"
+
+def generate_reference_contrat(type_transport: str):
+    now = datetime.now()
+    prefix = "CTR-S" if type_transport == "solide" else "CTR-L"
+    return f"{prefix}-{now.year}-{str(uuid.uuid4())[:6].upper()}"
+
+# ============= ENTREPRISE CONFIG ROUTES =============
+@api_router.get("/config/entreprise", response_model=EntrepriseConfig)
+async def get_entreprise_config():
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    if not config:
+        # Créer config par défaut
+        default_config = EntrepriseConfig()
+        await db.config.insert_one(default_config.model_dump())
+        return default_config
+    return config
+
+@api_router.put("/config/entreprise", response_model=EntrepriseConfig)
+async def update_entreprise_config(input: EntrepriseConfigUpdate):
+    update_data = {k: v for k, v in input.model_dump().items() if v is not None}
+    await db.config.update_one(
+        {"id": "config_entreprise"},
+        {"$set": update_data},
+        upsert=True
+    )
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    return config
 
 # ============= TRACTEURS ROUTES =============
 @api_router.get("/tracteurs", response_model=List[Tracteur])
@@ -268,7 +474,11 @@ async def get_chauffeur(chauffeur_id: str):
 
 @api_router.post("/chauffeurs", response_model=Chauffeur)
 async def create_chauffeur(input: ChauffeurCreate):
-    chauffeur = Chauffeur(**input.model_dump())
+    chauffeur_data = input.model_dump()
+    # Générer un code d'accès automatique si non fourni
+    if not chauffeur_data.get('code_acces'):
+        chauffeur_data['code_acces'] = str(uuid.uuid4())[:6].upper()
+    chauffeur = Chauffeur(**chauffeur_data)
     doc = chauffeur.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     await db.chauffeurs.insert_one(doc)
@@ -290,6 +500,22 @@ async def delete_chauffeur(chauffeur_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Chauffeur non trouvé")
     return {"message": "Chauffeur supprimé"}
+
+# ============= AUTH CHAUFFEUR =============
+@api_router.post("/chauffeur/login", response_model=ChauffeurSession)
+async def chauffeur_login(input: ChauffeurLogin):
+    chauffeur = await db.chauffeurs.find_one({"code_acces": input.code_acces}, {"_id": 0})
+    if not chauffeur:
+        raise HTTPException(status_code=401, detail="Code d'accès invalide")
+    
+    # Générer un token simple
+    token = str(uuid.uuid4())
+    
+    return ChauffeurSession(
+        chauffeur_id=chauffeur['id'],
+        chauffeur_nom=f"{chauffeur['prenom']} {chauffeur['nom']}",
+        token=token
+    )
 
 # ============= CLIENTS ROUTES =============
 @api_router.get("/clients", response_model=List[Client])
@@ -351,15 +577,13 @@ async def create_chantier(input: ChantierCreate):
     enriched_affectations = []
     for aff in input.affectations:
         aff_dict = aff.model_dump()
-        # Get tracteur identifiant
         tracteur = await db.tracteurs.find_one({"id": aff.tracteur_id}, {"_id": 0})
         if tracteur:
             aff_dict['tracteur_identifiant'] = tracteur.get('identifiant')
-        # Get equipement numero
         equipement = await db.equipements.find_one({"id": aff.equipement_id}, {"_id": 0})
         if equipement:
             aff_dict['equipement_numero'] = equipement.get('numero')
-        # Get chauffeur name
+            aff_dict['equipement_type'] = equipement.get('type')
         chauffeur = await db.chauffeurs.find_one({"id": aff.chauffeur_id}, {"_id": 0})
         if chauffeur:
             aff_dict['chauffeur_nom'] = f"{chauffeur.get('prenom', '')} {chauffeur.get('nom', '')}".strip()
@@ -369,9 +593,15 @@ async def create_chantier(input: ChantierCreate):
     client = await db.clients.find_one({"id": input.client_id}, {"_id": 0})
     client_nom = client.get('raison_sociale') if client else None
     
+    # Si pas de tarifs définis, récupérer ceux du client
+    tarifs = input.tarifs
+    if not tarifs and client and client.get('tarifs'):
+        tarifs = [TarifChantier(**t) for t in client.get('tarifs', [])]
+    
     chantier_data = input.model_dump()
     chantier_data['affectations'] = enriched_affectations
     chantier_data['client_nom'] = client_nom
+    chantier_data['tarifs'] = [t.model_dump() if hasattr(t, 'model_dump') else t for t in tarifs]
     
     chantier = Chantier(**chantier_data)
     doc = chantier.model_dump()
@@ -385,7 +615,6 @@ async def update_chantier(chantier_id: str, input: ChantierCreate):
     if not existing:
         raise HTTPException(status_code=404, detail="Chantier non trouvé")
     
-    # Enrich affectations with names
     enriched_affectations = []
     for aff in input.affectations:
         aff_dict = aff.model_dump()
@@ -395,6 +624,7 @@ async def update_chantier(chantier_id: str, input: ChantierCreate):
         equipement = await db.equipements.find_one({"id": aff.equipement_id}, {"_id": 0})
         if equipement:
             aff_dict['equipement_numero'] = equipement.get('numero')
+            aff_dict['equipement_type'] = equipement.get('type')
         chauffeur = await db.chauffeurs.find_one({"id": aff.chauffeur_id}, {"_id": 0})
         if chauffeur:
             aff_dict['chauffeur_nom'] = f"{chauffeur.get('prenom', '')} {chauffeur.get('nom', '')}".strip()
@@ -418,27 +648,378 @@ async def delete_chantier(chantier_id: str):
         raise HTTPException(status_code=404, detail="Chantier non trouvé")
     return {"message": "Chantier supprimé"}
 
+# Chantiers pour un chauffeur
+@api_router.get("/chauffeur/{chauffeur_id}/chantiers")
+async def get_chauffeur_chantiers(chauffeur_id: str):
+    # Récupérer les chantiers où le chauffeur est affecté et qui sont en cours ou planifiés
+    chantiers = await db.chantiers.find({
+        "affectations.chauffeur_id": chauffeur_id,
+        "statut": {"$in": ["planifie", "en_cours"]}
+    }, {"_id": 0}).to_list(100)
+    return chantiers
+
+# ============= POINTAGES ROUTES =============
+@api_router.get("/pointages", response_model=List[Pointage])
+async def get_pointages(chantier_id: Optional[str] = None, chauffeur_id: Optional[str] = None):
+    query = {}
+    if chantier_id:
+        query["chantier_id"] = chantier_id
+    if chauffeur_id:
+        query["chauffeur_id"] = chauffeur_id
+    pointages = await db.pointages.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
+    return pointages
+
+@api_router.get("/pointages/{pointage_id}", response_model=Pointage)
+async def get_pointage(pointage_id: str):
+    pointage = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    if not pointage:
+        raise HTTPException(status_code=404, detail="Pointage non trouvé")
+    return pointage
+
+@api_router.post("/pointages", response_model=Pointage)
+async def create_pointage(input: PointageCreate):
+    # Vérifier que le chauffeur est bien affecté au chantier
+    chantier = await db.chantiers.find_one({"id": input.chantier_id}, {"_id": 0})
+    if not chantier:
+        raise HTTPException(status_code=404, detail="Chantier non trouvé")
+    
+    chauffeur = await db.chauffeurs.find_one({"id": input.chauffeur_id}, {"_id": 0})
+    if not chauffeur:
+        raise HTTPException(status_code=404, detail="Chauffeur non trouvé")
+    
+    # Vérifier si un pointage existe déjà pour ce jour
+    existing = await db.pointages.find_one({
+        "chantier_id": input.chantier_id,
+        "chauffeur_id": input.chauffeur_id,
+        "date": input.date
+    }, {"_id": 0})
+    
+    if existing:
+        # Mettre à jour le pointage existant
+        update_data = input.model_dump()
+        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+        await db.pointages.update_one(
+            {"id": existing['id']},
+            {"$set": update_data}
+        )
+        updated = await db.pointages.find_one({"id": existing['id']}, {"_id": 0})
+        return updated
+    
+    # Créer un nouveau pointage
+    pointage_data = input.model_dump()
+    pointage_data['chantier_reference'] = chantier.get('reference')
+    pointage_data['chauffeur_nom'] = f"{chauffeur.get('prenom', '')} {chauffeur.get('nom', '')}".strip()
+    pointage_data['client_nom'] = chantier.get('client_nom')
+    
+    pointage = Pointage(**pointage_data)
+    doc = pointage.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    doc['updated_at'] = doc['updated_at'].isoformat()
+    await db.pointages.insert_one(doc)
+    return pointage
+
+@api_router.put("/pointages/{pointage_id}", response_model=Pointage)
+async def update_pointage(pointage_id: str, input: PointageCreate):
+    existing = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Pointage non trouvé")
+    
+    update_data = input.model_dump()
+    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    await db.pointages.update_one({"id": pointage_id}, {"$set": update_data})
+    updated = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/pointages/{pointage_id}")
+async def delete_pointage(pointage_id: str):
+    result = await db.pointages.delete_one({"id": pointage_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Pointage non trouvé")
+    return {"message": "Pointage supprimé"}
+
+# Récapitulatif pointages pour un chantier
+@api_router.get("/chantiers/{chantier_id}/recap")
+async def get_chantier_recap(chantier_id: str):
+    chantier = await db.chantiers.find_one({"id": chantier_id}, {"_id": 0})
+    if not chantier:
+        raise HTTPException(status_code=404, detail="Chantier non trouvé")
+    
+    pointages = await db.pointages.find({"chantier_id": chantier_id}, {"_id": 0}).to_list(1000)
+    
+    total_heures = sum(p.get('heures_travaillees', 0) for p in pointages)
+    total_tonnage = sum(p.get('tonnage_transporte', 0) for p in pointages)
+    total_rotations = sum(p.get('nombre_rotations', 0) for p in pointages)
+    nombre_jours = len(set(p.get('date') for p in pointages))
+    
+    # Calculer le montant selon les tarifs
+    montant_ht = 0
+    lignes = []
+    tarifs = chantier.get('tarifs', [])
+    
+    for tarif in tarifs:
+        methode = tarif.get('methode')
+        prix = tarif.get('prix_unitaire', 0)
+        
+        if methode == 'heure' and total_heures > 0:
+            montant = total_heures * prix
+            lignes.append({
+                "description": f"Heures de travail",
+                "quantite": total_heures,
+                "unite": "heures",
+                "prix_unitaire": prix,
+                "montant_ht": montant
+            })
+            montant_ht += montant
+        elif methode == 'tonne' and total_tonnage > 0:
+            montant = total_tonnage * prix
+            lignes.append({
+                "description": f"Transport ({chantier.get('transport_type', 'solide')})",
+                "quantite": total_tonnage,
+                "unite": "tonnes",
+                "prix_unitaire": prix,
+                "montant_ht": montant
+            })
+            montant_ht += montant
+        elif methode == 'journee' and nombre_jours > 0:
+            montant = nombre_jours * prix
+            lignes.append({
+                "description": "Forfait journalier",
+                "quantite": nombre_jours,
+                "unite": "jours",
+                "prix_unitaire": prix,
+                "montant_ht": montant
+            })
+            montant_ht += montant
+    
+    return {
+        "chantier": chantier,
+        "total_heures": total_heures,
+        "total_tonnage": total_tonnage,
+        "total_rotations": total_rotations,
+        "nombre_jours": nombre_jours,
+        "pointages": pointages,
+        "lignes_facture": lignes,
+        "montant_ht": montant_ht,
+        "montant_tva": montant_ht * 0.20,
+        "montant_ttc": montant_ht * 1.20
+    }
+
+# ============= FACTURES ROUTES =============
+@api_router.get("/factures", response_model=List[Facture])
+async def get_factures(statut: Optional[FactureStatus] = None, client_id: Optional[str] = None):
+    query = {}
+    if statut:
+        query["statut"] = statut
+    if client_id:
+        query["client_id"] = client_id
+    factures = await db.factures.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return factures
+
+@api_router.get("/factures/{facture_id}", response_model=Facture)
+async def get_facture(facture_id: str):
+    facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not facture:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    return facture
+
+@api_router.post("/factures/generer", response_model=Facture)
+async def generer_facture(input: FactureCreate):
+    """Génère automatiquement une facture à partir du récapitulatif d'un chantier"""
+    
+    # Récupérer le chantier
+    chantier = await db.chantiers.find_one({"id": input.chantier_id}, {"_id": 0})
+    if not chantier:
+        raise HTTPException(status_code=404, detail="Chantier non trouvé")
+    
+    # Récupérer le client
+    client = await db.clients.find_one({"id": chantier.get('client_id')}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    # Récupérer la config entreprise
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    if not config:
+        config = EntrepriseConfig().model_dump()
+    
+    # Calculer les lignes de facture depuis les pointages
+    pointages = await db.pointages.find({"chantier_id": input.chantier_id}, {"_id": 0}).to_list(1000)
+    
+    total_heures = sum(p.get('heures_travaillees', 0) for p in pointages)
+    total_tonnage = sum(p.get('tonnage_transporte', 0) for p in pointages)
+    nombre_jours = len(set(p.get('date') for p in pointages))
+    
+    lignes = []
+    montant_ht = 0
+    tarifs = chantier.get('tarifs', [])
+    
+    for tarif in tarifs:
+        methode = tarif.get('methode')
+        prix = tarif.get('prix_unitaire', 0)
+        
+        if methode == 'heure' and total_heures > 0:
+            montant = round(total_heures * prix, 2)
+            lignes.append(LigneFacture(
+                description=f"Heures de travail - Chantier {chantier.get('reference')}",
+                quantite=total_heures,
+                unite="heures",
+                prix_unitaire=prix,
+                montant_ht=montant
+            ))
+            montant_ht += montant
+        elif methode == 'tonne' and total_tonnage > 0:
+            montant = round(total_tonnage * prix, 2)
+            lignes.append(LigneFacture(
+                description=f"Transport {chantier.get('transport_type', 'solide')} - {chantier.get('lieu')}",
+                quantite=total_tonnage,
+                unite="tonnes",
+                prix_unitaire=prix,
+                montant_ht=montant
+            ))
+            montant_ht += montant
+        elif methode == 'journee' and nombre_jours > 0:
+            montant = round(nombre_jours * prix, 2)
+            lignes.append(LigneFacture(
+                description=f"Forfait journalier - Chantier {chantier.get('reference')}",
+                quantite=nombre_jours,
+                unite="jours",
+                prix_unitaire=prix,
+                montant_ht=montant
+            ))
+            montant_ht += montant
+    
+    if not lignes:
+        raise HTTPException(status_code=400, detail="Aucune donnée à facturer (vérifiez les pointages et tarifs)")
+    
+    taux_tva = 20.0
+    montant_tva = round(montant_ht * (taux_tva / 100), 2)
+    montant_ttc = round(montant_ht + montant_tva, 2)
+    
+    facture = Facture(
+        chantier_id=input.chantier_id,
+        client_id=client['id'],
+        numero=generate_numero_facture(),
+        date_emission=datetime.now().strftime("%Y-%m-%d"),
+        date_echeance=input.date_echeance,
+        lignes=[l.model_dump() for l in lignes],
+        montant_ht=montant_ht,
+        taux_tva=taux_tva,
+        montant_tva=montant_tva,
+        montant_ttc=montant_ttc,
+        statut=FactureStatus.BROUILLON,
+        notes=input.notes,
+        client_raison_sociale=client.get('raison_sociale'),
+        client_adresse=f"{client.get('adresse')}, {client.get('code_postal')} {client.get('ville')}",
+        client_siret=client.get('siret'),
+        client_tva=client.get('tva_intracommunautaire'),
+        chantier_reference=chantier.get('reference'),
+        chantier_lieu=chantier.get('lieu')
+    )
+    
+    doc = facture.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.factures.insert_one(doc)
+    
+    return facture
+
+@api_router.put("/factures/{facture_id}/statut")
+async def update_facture_statut(facture_id: str, statut: FactureStatus):
+    existing = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    await db.factures.update_one({"id": facture_id}, {"$set": {"statut": statut}})
+    updated = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/factures/{facture_id}")
+async def delete_facture(facture_id: str):
+    result = await db.factures.delete_one({"id": facture_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    return {"message": "Facture supprimée"}
+
+# ============= CONTRATS ROUTES =============
+@api_router.get("/contrats", response_model=List[Contrat])
+async def get_contrats(client_id: Optional[str] = None, statut: Optional[ContratStatus] = None):
+    query = {}
+    if client_id:
+        query["client_id"] = client_id
+    if statut:
+        query["statut"] = statut
+    contrats = await db.contrats.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return contrats
+
+@api_router.get("/contrats/{contrat_id}", response_model=Contrat)
+async def get_contrat(contrat_id: str):
+    contrat = await db.contrats.find_one({"id": contrat_id}, {"_id": 0})
+    if not contrat:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    return contrat
+
+@api_router.post("/contrats", response_model=Contrat)
+async def create_contrat(input: ContratCreate):
+    client = await db.clients.find_one({"id": input.client_id}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    contrat = Contrat(
+        client_id=input.client_id,
+        type_transport=input.type_transport,
+        reference=generate_reference_contrat(input.type_transport),
+        date_creation=datetime.now().strftime("%Y-%m-%d"),
+        conditions=input.conditions,
+        statut=ContratStatus.BROUILLON,
+        client_raison_sociale=client.get('raison_sociale'),
+        client_adresse=f"{client.get('adresse')}, {client.get('code_postal')} {client.get('ville')}",
+        client_siret=client.get('siret'),
+        client_email=client.get('email')
+    )
+    
+    doc = contrat.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.contrats.insert_one(doc)
+    return contrat
+
+@api_router.put("/contrats/{contrat_id}/statut")
+async def update_contrat_statut(contrat_id: str, statut: ContratStatus):
+    existing = await db.contrats.find_one({"id": contrat_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    
+    await db.contrats.update_one({"id": contrat_id}, {"$set": {"statut": statut}})
+    updated = await db.contrats.find_one({"id": contrat_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/contrats/{contrat_id}")
+async def delete_contrat(contrat_id: str):
+    result = await db.contrats.delete_one({"id": contrat_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    return {"message": "Contrat supprimé"}
+
 # ============= DASHBOARD STATS =============
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats():
-    # Tracteurs
     total_tracteurs = await db.tracteurs.count_documents({})
     tracteurs_disponibles = await db.tracteurs.count_documents({"statut": VehicleStatus.DISPONIBLE})
-    
-    # Equipements
     total_equipements = await db.equipements.count_documents({})
     equipements_disponibles = await db.equipements.count_documents({"statut": VehicleStatus.DISPONIBLE})
-    
-    # Chauffeurs
     total_chauffeurs = await db.chauffeurs.count_documents({})
     chauffeurs_disponibles = await db.chauffeurs.count_documents({"disponible": True})
-    
-    # Clients
     total_clients = await db.clients.count_documents({})
-    
-    # Chantiers
     chantiers_en_cours = await db.chantiers.count_documents({"statut": ChantierStatus.EN_COURS})
     chantiers_planifies = await db.chantiers.count_documents({"statut": ChantierStatus.PLANIFIE})
+    
+    # Factures en attente
+    factures_en_attente = await db.factures.count_documents({"statut": {"$in": ["brouillon", "emise", "envoyee"]}})
+    
+    # CA du mois (factures payées ou signées)
+    debut_mois = datetime.now().replace(day=1).strftime("%Y-%m-%d")
+    factures_mois = await db.factures.find({
+        "statut": {"$in": ["signee", "payee"]},
+        "date_emission": {"$gte": debut_mois}
+    }, {"_id": 0, "montant_ht": 1}).to_list(1000)
+    ca_mois = sum(f.get('montant_ht', 0) for f in factures_mois)
     
     return DashboardStats(
         total_tracteurs=total_tracteurs,
@@ -449,13 +1030,15 @@ async def get_dashboard_stats():
         chauffeurs_disponibles=chauffeurs_disponibles,
         total_clients=total_clients,
         chantiers_en_cours=chantiers_en_cours,
-        chantiers_planifies=chantiers_planifies
+        chantiers_planifies=chantiers_planifies,
+        factures_en_attente=factures_en_attente,
+        ca_mois=ca_mois
     )
 
 # Root endpoint
 @api_router.get("/")
 async def root():
-    return {"message": "Terre de Beauce ERP API", "version": "1.0.0"}
+    return {"message": "Terre de Beauce ERP API", "version": "2.0.0"}
 
 # Include the router in the main app
 app.include_router(api_router)
