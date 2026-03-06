@@ -1301,6 +1301,119 @@ async def delete_contrat(contrat_id: str):
         raise HTTPException(status_code=404, detail="Contrat non trouvé")
     return {"message": "Contrat supprimé"}
 
+# ============= CONTRATS CCPA ROUTES =============
+@api_router.get("/contrats-ccpa")
+async def get_contrats_ccpa(chantier_id: Optional[str] = None, client_id: Optional[str] = None, statut: Optional[ContratStatus] = None):
+    """Récupère tous les contrats CCPA"""
+    query = {}
+    if chantier_id:
+        query["chantier_id"] = chantier_id
+    if client_id:
+        query["client_id"] = client_id
+    if statut:
+        query["statut"] = statut
+    contrats = await db.contrats_ccpa.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return contrats
+
+@api_router.get("/contrats-ccpa/{contrat_id}")
+async def get_contrat_ccpa(contrat_id: str):
+    """Récupère un contrat CCPA par son ID"""
+    contrat = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
+    if not contrat:
+        raise HTTPException(status_code=404, detail="Contrat CCPA non trouvé")
+    return contrat
+
+@api_router.get("/chantiers/{chantier_id}/contrat-ccpa")
+async def get_contrat_ccpa_by_chantier(chantier_id: str):
+    """Récupère le contrat CCPA associé à un chantier"""
+    contrat = await db.contrats_ccpa.find_one({"chantier_id": chantier_id}, {"_id": 0})
+    if not contrat:
+        raise HTTPException(status_code=404, detail="Aucun contrat CCPA pour ce chantier")
+    return contrat
+
+@api_router.post("/contrats-ccpa")
+async def create_contrat_ccpa(input: ContratCCPACreate):
+    """Crée un nouveau contrat CCPA pré-rempli depuis le chantier"""
+    # Récupérer le chantier
+    chantier = await db.chantiers.find_one({"id": input.chantier_id}, {"_id": 0})
+    if not chantier:
+        raise HTTPException(status_code=404, detail="Chantier non trouvé")
+    
+    # Vérifier qu'il n'y a pas déjà un contrat pour ce chantier
+    existing = await db.contrats_ccpa.find_one({"chantier_id": input.chantier_id}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Un contrat existe déjà pour ce chantier")
+    
+    # Récupérer le client
+    client = await db.clients.find_one({"id": chantier.get('client_id')}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    
+    # Déterminer le prix et l'unité depuis les tarifs du chantier
+    tarifs = chantier.get('tarifs', [])
+    prix_unitaire = 0
+    unite_facturation = ""
+    if tarifs:
+        tarif = tarifs[0]  # Premier tarif
+        prix_unitaire = tarif.get('prix_unitaire', 0)
+        methode = tarif.get('methode', '')
+        if methode == 'heure':
+            unite_facturation = "heure effectuée"
+        elif methode == 'tonne':
+            unite_facturation = "tonne transportée"
+        elif methode == 'journee':
+            unite_facturation = "journée effectuée"
+    
+    # Créer le contrat CCPA pré-rempli
+    contrat = ContratCCPA(
+        numero_contrat=generate_numero_contrat_ccpa(),
+        chantier_id=input.chantier_id,
+        client_id=client['id'],
+        client_nom=client.get('raison_sociale', ''),
+        client_interlocuteur=client.get('contact_nom', ''),
+        client_adresse=f"{client.get('adresse', '')}, {client.get('code_postal', '')} {client.get('ville', '')}",
+        client_email=client.get('email', ''),
+        client_telephone=client.get('telephone', ''),
+        prix_unitaire=prix_unitaire,
+        unite_facturation=unite_facturation,
+        gasoil_fourni=chantier.get('avec_gasoil', True),
+        transport_type=chantier.get('transport_type', 'solide'),
+        date_creation=datetime.now().strftime("%Y-%m-%d"),
+        statut=ContratStatus.BROUILLON
+    )
+    
+    doc = contrat.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    doc['updated_at'] = doc['updated_at'].isoformat()
+    await db.contrats_ccpa.insert_one(doc)
+    
+    # Récupérer sans _id
+    created = await db.contrats_ccpa.find_one({"id": contrat.id}, {"_id": 0})
+    return created
+
+@api_router.put("/contrats-ccpa/{contrat_id}")
+async def update_contrat_ccpa(contrat_id: str, input: ContratCCPAUpdate):
+    """Met à jour un contrat CCPA (champs modifiables)"""
+    existing = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Contrat CCPA non trouvé")
+    
+    # Mettre à jour uniquement les champs fournis
+    update_data = {k: v for k, v in input.model_dump().items() if v is not None}
+    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    
+    await db.contrats_ccpa.update_one({"id": contrat_id}, {"$set": update_data})
+    updated = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/contrats-ccpa/{contrat_id}")
+async def delete_contrat_ccpa(contrat_id: str):
+    """Supprime un contrat CCPA"""
+    result = await db.contrats_ccpa.delete_one({"id": contrat_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Contrat CCPA non trouvé")
+    return {"message": "Contrat CCPA supprimé"}
+
 # ============= DASHBOARD STATS =============
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats():
