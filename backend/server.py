@@ -728,12 +728,14 @@ async def get_chauffeur_chantiers(chauffeur_id: str):
 
 # ============= POINTAGES ROUTES =============
 @api_router.get("/pointages", response_model=List[Pointage])
-async def get_pointages(chantier_id: Optional[str] = None, chauffeur_id: Optional[str] = None):
+async def get_pointages(chantier_id: Optional[str] = None, chauffeur_id: Optional[str] = None, date: Optional[str] = None):
     query = {}
     if chantier_id:
         query["chantier_id"] = chantier_id
     if chauffeur_id:
         query["chauffeur_id"] = chauffeur_id
+    if date:
+        query["date"] = date
     pointages = await db.pointages.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
     return pointages
 
@@ -755,6 +757,12 @@ async def create_pointage(input: PointageCreate):
     if not chauffeur:
         raise HTTPException(status_code=404, detail="Chauffeur non trouvé")
     
+    # Calculer les totaux depuis les tours
+    tours = input.tours or []
+    total_volume = sum(t.volume for t in tours)
+    total_distance = sum(t.distance_km for t in tours)
+    nombre_tours = len(tours)
+    
     # Vérifier si un pointage existe déjà pour ce jour
     existing = await db.pointages.find_one({
         "chantier_id": input.chantier_id,
@@ -765,6 +773,10 @@ async def create_pointage(input: PointageCreate):
     if existing:
         # Mettre à jour le pointage existant
         update_data = input.model_dump()
+        update_data['tours'] = [t.model_dump() if hasattr(t, 'model_dump') else t for t in tours]
+        update_data['total_volume'] = total_volume
+        update_data['total_distance'] = total_distance
+        update_data['nombre_tours'] = nombre_tours
         update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
         await db.pointages.update_one(
             {"id": existing['id']},
@@ -775,9 +787,15 @@ async def create_pointage(input: PointageCreate):
     
     # Créer un nouveau pointage
     pointage_data = input.model_dump()
+    pointage_data['tours'] = [t.model_dump() if hasattr(t, 'model_dump') else t for t in tours]
     pointage_data['chantier_reference'] = chantier.get('reference')
     pointage_data['chauffeur_nom'] = f"{chauffeur.get('prenom', '')} {chauffeur.get('nom', '')}".strip()
     pointage_data['client_nom'] = chantier.get('client_nom')
+    pointage_data['transport_type'] = chantier.get('transport_type')
+    pointage_data['avec_gasoil'] = chantier.get('avec_gasoil', True)
+    pointage_data['total_volume'] = total_volume
+    pointage_data['total_distance'] = total_distance
+    pointage_data['nombre_tours'] = nombre_tours
     
     pointage = Pointage(**pointage_data)
     doc = pointage.model_dump()
@@ -786,13 +804,74 @@ async def create_pointage(input: PointageCreate):
     await db.pointages.insert_one(doc)
     return pointage
 
+# Ajouter un tour à un pointage existant
+@api_router.post("/pointages/{pointage_id}/tours")
+async def add_tour_to_pointage(pointage_id: str, tour: Tour):
+    existing = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Pointage non trouvé")
+    
+    tours = existing.get('tours', [])
+    tour_data = tour.model_dump()
+    tours.append(tour_data)
+    
+    # Recalculer les totaux
+    total_volume = sum(t.get('volume', 0) for t in tours)
+    total_distance = sum(t.get('distance_km', 0) for t in tours)
+    
+    await db.pointages.update_one(
+        {"id": pointage_id},
+        {"$set": {
+            "tours": tours,
+            "total_volume": total_volume,
+            "total_distance": total_distance,
+            "nombre_tours": len(tours),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    updated = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    return updated
+
+# Supprimer un tour d'un pointage
+@api_router.delete("/pointages/{pointage_id}/tours/{tour_id}")
+async def delete_tour_from_pointage(pointage_id: str, tour_id: str):
+    existing = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Pointage non trouvé")
+    
+    tours = existing.get('tours', [])
+    tours = [t for t in tours if t.get('id') != tour_id]
+    
+    # Recalculer les totaux
+    total_volume = sum(t.get('volume', 0) for t in tours)
+    total_distance = sum(t.get('distance_km', 0) for t in tours)
+    
+    await db.pointages.update_one(
+        {"id": pointage_id},
+        {"$set": {
+            "tours": tours,
+            "total_volume": total_volume,
+            "total_distance": total_distance,
+            "nombre_tours": len(tours),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "Tour supprimé"}
+
 @api_router.put("/pointages/{pointage_id}", response_model=Pointage)
 async def update_pointage(pointage_id: str, input: PointageCreate):
     existing = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Pointage non trouvé")
     
+    tours = input.tours or []
     update_data = input.model_dump()
+    update_data['tours'] = [t.model_dump() if hasattr(t, 'model_dump') else t for t in tours]
+    update_data['total_volume'] = sum(t.volume for t in tours)
+    update_data['total_distance'] = sum(t.distance_km for t in tours)
+    update_data['nombre_tours'] = len(tours)
     update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
     await db.pointages.update_one({"id": pointage_id}, {"$set": update_data})
     updated = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
