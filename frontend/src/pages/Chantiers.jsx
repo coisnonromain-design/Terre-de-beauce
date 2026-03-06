@@ -275,6 +275,7 @@ export default function Chantiers() {
       affectations: [],
       tarifs: [],
       transport_type: "solide",
+      avec_gasoil: true,
       notes: "",
     });
     setNewAffectation({ tracteur_id: "", equipement_id: "", chauffeur_id: "" });
