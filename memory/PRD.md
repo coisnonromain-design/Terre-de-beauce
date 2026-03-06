@@ -52,7 +52,10 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - 20 tranches de 2.5 km jusqu'à 50 km
   - Interface de configuration modifiable
   - Taux horaire minimum configurable
-- ⏳ Option "gasoil fourni/non fourni" sur les chantiers
+- ✅ **Option "gasoil fourni"** sur les chantiers
+  - Checkbox dans le formulaire de création/modification
+  - Affichage dans la liste et les détails (vert/orange)
+  - Détermine le barème à utiliser pour la facturation
 - ⏳ Logique de facturation avec minima horaire
 - ⏳ Refonte du portail chauffeur (saisie tours)
 
