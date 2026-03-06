@@ -448,6 +448,104 @@ async def update_entreprise_config(input: EntrepriseConfigUpdate):
     config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
     return config
 
+# ============= BAREMES KILOMÉTRIQUES ROUTES =============
+def generate_default_baremes() -> BaremesConfig:
+    """Génère les barèmes par défaut avec tranches de 2.5km jusqu'à 50km"""
+    tranches = []
+    for i in range(20):  # 20 tranches de 2.5km = 50km
+        km_min = i * 2.5
+        km_max = (i + 1) * 2.5
+        tranches.append(TrancheBareme(km_min=km_min, km_max=km_max, prix_tonne_km=0))
+    
+    bareme = Bareme(tranches=tranches)
+    return BaremesConfig(
+        solide_avec_gasoil=bareme,
+        solide_sans_gasoil=bareme,
+        liquide_avec_gasoil=bareme,
+        liquide_sans_gasoil=bareme,
+        taux_horaire_minimum=0
+    )
+
+@api_router.get("/config/baremes")
+async def get_baremes_config():
+    """Récupère la configuration des barèmes kilométriques"""
+    config = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+    if not config:
+        # Créer les barèmes par défaut
+        default_baremes = generate_default_baremes()
+        doc = default_baremes.model_dump()
+        await db.config.insert_one(doc)
+        return doc
+    return config
+
+@api_router.put("/config/baremes")
+async def update_baremes_config(input: BaremesConfigUpdate):
+    """Met à jour la configuration des barèmes kilométriques"""
+    # Récupérer les barèmes existants ou créer par défaut
+    existing = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+    if not existing:
+        default_baremes = generate_default_baremes()
+        existing = default_baremes.model_dump()
+        await db.config.insert_one(existing)
+    
+    # Mettre à jour uniquement les champs fournis
+    update_data = {}
+    input_data = input.model_dump(exclude_unset=True)
+    
+    for key, value in input_data.items():
+        if value is not None:
+            if isinstance(value, dict) and 'tranches' in value:
+                update_data[key] = value
+            else:
+                update_data[key] = value
+    
+    if update_data:
+        await db.config.update_one(
+            {"id": "config_baremes"},
+            {"$set": update_data},
+            upsert=True
+        )
+    
+    updated = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+    return updated
+
+@api_router.put("/config/baremes/{bareme_type}")
+async def update_single_bareme(bareme_type: str, bareme: Bareme):
+    """Met à jour un seul barème (solide_avec_gasoil, solide_sans_gasoil, etc.)"""
+    valid_types = ["solide_avec_gasoil", "solide_sans_gasoil", "liquide_avec_gasoil", "liquide_sans_gasoil"]
+    if bareme_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Type de barème invalide. Valeurs acceptées: {valid_types}")
+    
+    # S'assurer que les barèmes existent
+    existing = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+    if not existing:
+        default_baremes = generate_default_baremes()
+        await db.config.insert_one(default_baremes.model_dump())
+    
+    await db.config.update_one(
+        {"id": "config_baremes"},
+        {"$set": {bareme_type: bareme.model_dump()}}
+    )
+    
+    updated = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+    return updated
+
+@api_router.put("/config/baremes/taux-horaire-minimum")
+async def update_taux_horaire_minimum(taux: float):
+    """Met à jour le taux horaire minimum"""
+    existing = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+    if not existing:
+        default_baremes = generate_default_baremes()
+        await db.config.insert_one(default_baremes.model_dump())
+    
+    await db.config.update_one(
+        {"id": "config_baremes"},
+        {"$set": {"taux_horaire_minimum": taux}}
+    )
+    
+    updated = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+    return updated
+
 # ============= TRACTEURS ROUTES =============
 @api_router.get("/tracteurs", response_model=List[Tracteur])
 async def get_tracteurs():
