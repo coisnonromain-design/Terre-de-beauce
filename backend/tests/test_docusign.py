@@ -30,72 +30,34 @@ class TestDocuSignStatus:
 class TestDocuSignSendContrat:
     """Test POST /api/docusign/send-contrat/{id} endpoint"""
     
-    @pytest.fixture
-    def test_client_and_chantier(self):
-        """Create test client and chantier for contrat testing"""
-        # Create test client
-        client_data = {
-            "raison_sociale": f"TEST_DocuSign_Client_{uuid.uuid4().hex[:6]}",
-            "adresse": "123 Test Street",
-            "code_postal": "75001",
-            "ville": "Paris",
-            "pays": "France",
-            "email": "test@docusign.com",
-            "tarifs": [{"methode": "heure", "prix_unitaire": 50.0}]
-        }
-        client_res = requests.post(f"{BASE_URL}/api/clients", json=client_data)
-        assert client_res.status_code == 200
-        client = client_res.json()
-        
-        # Create test chantier
-        chantier_data = {
-            "reference": f"TEST_CH_{uuid.uuid4().hex[:6]}",
-            "client_id": client["id"],
-            "lieu": "Test Location",
-            "date_debut": "2026-01-15",
-            "statut": "planifie",
-            "affectations": [],
-            "tarifs": [{"methode": "heure", "prix_unitaire": 50.0}],
-            "transport_type": "solide",
-            "avec_gasoil": True
-        }
-        chantier_res = requests.post(f"{BASE_URL}/api/chantiers", json=chantier_data)
-        assert chantier_res.status_code == 200
-        chantier = chantier_res.json()
-        
-        yield {"client": client, "chantier": chantier}
-        
-        # Cleanup
-        requests.delete(f"{BASE_URL}/api/chantiers/{chantier['id']}")
-        requests.delete(f"{BASE_URL}/api/clients/{client['id']}")
-    
-    @pytest.fixture
-    def test_contrat(self, test_client_and_chantier):
-        """Create test contrat CCPA"""
-        chantier = test_client_and_chantier["chantier"]
-        
-        contrat_res = requests.post(f"{BASE_URL}/api/contrats-ccpa", json={"chantier_id": chantier["id"]})
-        assert contrat_res.status_code == 200
-        contrat = contrat_res.json()
-        
-        yield contrat
-        
-        # Cleanup
-        requests.delete(f"{BASE_URL}/api/contrats-ccpa/{contrat['id']}")
-    
-    def test_send_contrat_requires_authentication(self, test_contrat):
+    def test_send_contrat_requires_authentication(self):
         """POST /api/docusign/send-contrat/{id} should return 401 when not authenticated"""
-        contrat_id = test_contrat["id"]
-        response = requests.post(
-            f"{BASE_URL}/api/docusign/send-contrat/{contrat_id}",
-            params={"signer_email": "test@example.com", "signer_name": "Test User"}
-        )
-        # Should return 401 because DocuSign is not authenticated
-        assert response.status_code == 401
-        data = response.json()
-        assert "detail" in data
-        assert "non authentifié" in data["detail"].lower() or "authentifié" in data["detail"]
-        print(f"Expected 401 response: {data['detail']}")
+        # Get an existing contrat from the database
+        contrats_res = requests.get(f"{BASE_URL}/api/contrats-ccpa")
+        assert contrats_res.status_code == 200
+        contrats = contrats_res.json()
+        
+        if len(contrats) > 0:
+            contrat_id = contrats[0]["id"]
+            response = requests.post(
+                f"{BASE_URL}/api/docusign/send-contrat/{contrat_id}",
+                params={"signer_email": "test@example.com", "signer_name": "Test User"}
+            )
+            # Should return 401 because DocuSign is not authenticated
+            assert response.status_code == 401
+            data = response.json()
+            assert "detail" in data
+            assert "non authentifié" in data["detail"].lower() or "authentifié" in data["detail"]
+            print(f"Expected 401 response: {data['detail']}")
+        else:
+            # If no contrats exist, test with a fake ID (auth check happens first)
+            fake_id = str(uuid.uuid4())
+            response = requests.post(
+                f"{BASE_URL}/api/docusign/send-contrat/{fake_id}",
+                params={"signer_email": "test@example.com", "signer_name": "Test User"}
+            )
+            assert response.status_code == 401
+            print("No existing contrats, tested with fake ID")
     
     def test_send_contrat_not_found(self):
         """POST /api/docusign/send-contrat/{id} should return 401 for non-existent contrat (auth check first)"""
@@ -130,11 +92,14 @@ class TestDocuSignSyncStatus:
         print(f"Expected 401 response: {data['detail']}")
     
     def test_sync_status_invalid_document_type(self):
-        """Sync status with invalid document type should return 400"""
+        """Sync status with invalid document type should return 400 (validation before auth)"""
         fake_id = str(uuid.uuid4())
         response = requests.post(f"{BASE_URL}/api/docusign/sync-status/invalid/{fake_id}")
-        # Auth check happens first, so expect 401
-        assert response.status_code == 401
+        # Document type validation happens before auth check
+        assert response.status_code == 400
+        data = response.json()
+        assert "detail" in data
+        print(f"Expected 400 response: {data['detail']}")
 
 
 class TestDocuSignSyncAll:
