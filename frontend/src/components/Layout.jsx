@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ClipboardList,
   FileText,
+  FileSignature,
   Settings,
   ChevronRight,
   Menu,
