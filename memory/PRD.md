@@ -87,6 +87,13 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - `GET/PUT /api/config/baremes` - Configuration barèmes kilométriques
 - `GET/POST/PUT/DELETE /api/contrats-ccpa` - Gestion contrats CCPA
 - `GET /api/chantiers/{id}/contrat-ccpa` - Contrat CCPA d'un chantier
+- **DocuSign:**
+  - `GET /api/docusign/status` - État de connexion DocuSign
+  - `GET /api/docusign/auth-url` - URL d'authentification OAuth
+  - `POST /api/docusign/send-facture/{id}` - Envoyer facture pour signature
+  - `POST /api/docusign/send-contrat/{id}` - Envoyer contrat pour signature
+  - `POST /api/docusign/sync-status/{type}/{id}` - Synchroniser statut d'un document
+  - `POST /api/docusign/sync-all` - Synchroniser tous les documents
 
 ## Prioritized Backlog
 
