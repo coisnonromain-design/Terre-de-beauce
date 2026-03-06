@@ -171,6 +171,36 @@ export default function Factures() {
     }
   };
 
+  const syncDocuSignStatus = async (factureId) => {
+    setSyncingStatus(true);
+    try {
+      const res = await axios.post(`${API}/docusign/sync-status/facture/${factureId}`);
+      toast.success(`Statut mis à jour: ${docusignStatusConfig[res.data.docusign_status]?.label || res.data.docusign_status}`);
+      fetchData();
+      if (viewingFacture?.id === factureId) {
+        setViewingFacture(res.data.document);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de la synchronisation");
+    } finally {
+      setSyncingStatus(false);
+    }
+  };
+
+  const syncAllStatuses = async () => {
+    setSyncingStatus(true);
+    try {
+      const res = await axios.post(`${API}/docusign/sync-all`);
+      const totalSynced = res.data.factures.length + res.data.contrats.length;
+      toast.success(`${totalSynced} documents synchronisés`);
+      fetchData();
+    } catch (error) {
+      toast.error("Erreur lors de la synchronisation");
+    } finally {
+      setSyncingStatus(false);
+    }
+  };
+
   const handleGenerateFacture = async () => {
     if (!form.chantier_id || !form.date_echeance) {
       toast.error("Veuillez sélectionner un chantier et une date d'échéance");
