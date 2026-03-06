@@ -65,11 +65,20 @@ import { Separator } from "@/components/ui/separator";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const statusConfig = {
-  brouillon: { label: "Brouillon", class: "bg-slate-100 text-slate-600 border-slate-200" },
-  emise: { label: "Émise", class: "bg-blue-100 text-blue-700 border-blue-200" },
-  envoyee: { label: "Envoyée", class: "bg-indigo-100 text-indigo-700 border-indigo-200" },
-  signee: { label: "Signée", class: "bg-green-100 text-green-700 border-green-200" },
-  payee: { label: "Payée", class: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  brouillon: { label: "Brouillon", class: "bg-slate-100 text-slate-600 border-slate-200", icon: FileText },
+  emise: { label: "Émise", class: "bg-blue-100 text-blue-700 border-blue-200", icon: FileText },
+  envoyee: { label: "Envoyée", class: "bg-indigo-100 text-indigo-700 border-indigo-200", icon: Send },
+  signee: { label: "Signée", class: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle },
+  payee: { label: "Payée", class: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: Check },
+  annulee: { label: "Annulée", class: "bg-red-100 text-red-700 border-red-200", icon: XCircle },
+};
+
+const docusignStatusConfig = {
+  sent: { label: "Envoyé", class: "bg-blue-50 text-blue-600", icon: Mail },
+  delivered: { label: "Reçu", class: "bg-indigo-50 text-indigo-600", icon: Mail },
+  completed: { label: "Signé", class: "bg-green-50 text-green-600", icon: CheckCircle },
+  declined: { label: "Refusé", class: "bg-red-50 text-red-600", icon: XCircle },
+  voided: { label: "Annulé", class: "bg-gray-50 text-gray-600", icon: XCircle },
 };
 
 export default function Factures() {
