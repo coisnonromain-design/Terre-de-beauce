@@ -478,6 +478,11 @@ def generate_reference_contrat(type_transport: str):
     prefix = "CTR-S" if type_transport == "solide" else "CTR-L"
     return f"{prefix}-{now.year}-{str(uuid.uuid4())[:6].upper()}"
 
+def generate_numero_contrat_ccpa():
+    """Génère un numéro de contrat CCPA unique"""
+    now = datetime.now()
+    return f"CCPA-{now.year}-{now.month:02d}-{str(uuid.uuid4())[:6].upper()}"
+
 # ============= ENTREPRISE CONFIG ROUTES =============
 @api_router.get("/config/entreprise", response_model=EntrepriseConfig)
 async def get_entreprise_config():
