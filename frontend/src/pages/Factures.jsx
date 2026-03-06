@@ -597,7 +597,23 @@ export default function Factures() {
                     Valider et émettre
                   </Button>
                 )}
-                {viewingFacture.statut === "emise" && (
+                {viewingFacture.statut === "emise" && docusignStatus?.authenticated && (
+                  <Button
+                    onClick={() => {
+                      setSignatureForm({
+                        email: viewingFacture.client_email || "",
+                        name: viewingFacture.client_raison_sociale || "",
+                      });
+                      setSignatureDialogOpen(true);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    data-testid="send-signature-btn"
+                  >
+                    <Pen className="w-4 h-4 mr-2" />
+                    Envoyer en signature
+                  </Button>
+                )}
+                {viewingFacture.statut === "emise" && !docusignStatus?.authenticated && (
                   <Button
                     onClick={() => handleUpdateStatut(viewingFacture.id, "envoyee")}
                     variant="outline"
@@ -627,6 +643,56 @@ export default function Factures() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Signature Dialog */}
+      <Dialog open={signatureDialogOpen} onOpenChange={setSignatureDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-['Barlow_Condensed'] text-2xl flex items-center gap-2">
+              <Pen className="w-6 h-6 text-blue-600" />
+              Envoyer en signature électronique
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              La facture <strong>{viewingFacture?.numero}</strong> sera envoyée via DocuSign pour signature électronique.
+            </p>
+            <div>
+              <Label>Email du signataire *</Label>
+              <Input
+                type="email"
+                value={signatureForm.email}
+                onChange={(e) => setSignatureForm({ ...signatureForm, email: e.target.value })}
+                placeholder="client@email.com"
+                data-testid="signer-email-input"
+              />
+            </div>
+            <div>
+              <Label>Nom du signataire *</Label>
+              <Input
+                value={signatureForm.name}
+                onChange={(e) => setSignatureForm({ ...signatureForm, name: e.target.value })}
+                placeholder="Nom complet"
+                data-testid="signer-name-input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSignatureDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleSendForSignature}
+              disabled={sendingSignature}
+              className="bg-blue-600 hover:bg-blue-700"
+              data-testid="confirm-send-signature-btn"
+            >
+              <Pen className="w-4 h-4 mr-2" />
+              {sendingSignature ? "Envoi en cours..." : "Envoyer"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
