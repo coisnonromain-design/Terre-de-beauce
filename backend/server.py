@@ -220,6 +220,8 @@ class ChantierBase(BaseModel):
     client_id: str
     client_nom: Optional[str] = None
     lieu: str
+    lieu_chargement: Optional[str] = None
+    lieu_dechargement: Optional[str] = None
     description: Optional[str] = None
     date_debut: str
     date_fin: Optional[str] = None
@@ -228,6 +230,8 @@ class ChantierBase(BaseModel):
     # Tarification du chantier
     tarifs: List[TarifChantier] = []
     transport_type: TransportType = TransportType.SOLIDE
+    avec_gasoil: bool = True  # True = gasoil fourni, False = sans gasoil
+    facturation_kilometrique: bool = False  # True = facturation au km
     notes: Optional[str] = None
 
 class ChantierCreate(ChantierBase):
@@ -238,18 +242,32 @@ class Chantier(ChantierBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+# Tour (rotation avec volume et distance)
+class Tour(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    heure: Optional[str] = None  # Heure du tour
+    volume: float = 0  # Tonnes ou m³
+    distance_km: float = 0  # Distance chargement -> déchargement
+    lieu_chargement: Optional[str] = None
+    lieu_dechargement: Optional[str] = None
+    commentaire: Optional[str] = None
+
 # Pointage Chauffeur (Saisie heures et volumes)
 class PointageBase(BaseModel):
     chantier_id: str
     chauffeur_id: str
     date: str  # YYYY-MM-DD
     heures_travaillees: float = 0
-    tonnage_transporte: float = 0
-    nombre_rotations: int = 0
+    tours: List[Tour] = []  # Liste des tours de la journée
     commentaire: Optional[str] = None
 
-class PointageCreate(PointageBase):
-    pass
+class PointageCreate(BaseModel):
+    chantier_id: str
+    chauffeur_id: str
+    date: str
+    heures_travaillees: float = 0
+    tours: List[Tour] = []
+    commentaire: Optional[str] = None
 
 class Pointage(PointageBase):
     model_config = ConfigDict(extra="ignore")
@@ -257,8 +275,47 @@ class Pointage(PointageBase):
     chantier_reference: Optional[str] = None
     chauffeur_nom: Optional[str] = None
     client_nom: Optional[str] = None
+    transport_type: Optional[str] = None
+    avec_gasoil: Optional[bool] = None
+    # Totaux calculés
+    total_volume: float = 0
+    total_distance: float = 0
+    nombre_tours: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Barème kilométrique
+class TrancheBareme(BaseModel):
+    km_min: float
+    km_max: Optional[float] = None  # None = illimité
+    prix_tonne_km: float  # €/tonne.km ou €/m³.km
+
+class Bareme(BaseModel):
+    tranches: List[TrancheBareme] = []
+
+class BaremesConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = "config_baremes"
+    # Barèmes solide
+    solide_avec_gasoil: Bareme = Field(default_factory=Bareme)
+    solide_sans_gasoil: Bareme = Field(default_factory=Bareme)
+    # Barèmes liquide
+    liquide_avec_gasoil: Bareme = Field(default_factory=Bareme)
+    liquide_sans_gasoil: Bareme = Field(default_factory=Bareme)
+    # Taux horaire minimum
+    taux_horaire_minimum: float = 0
+    # Unités
+    unite_solide: str = "tonnes"
+    unite_liquide: str = "m³"
+
+class BaremesConfigUpdate(BaseModel):
+    solide_avec_gasoil: Optional[Bareme] = None
+    solide_sans_gasoil: Optional[Bareme] = None
+    liquide_avec_gasoil: Optional[Bareme] = None
+    liquide_sans_gasoil: Optional[Bareme] = None
+    taux_horaire_minimum: Optional[float] = None
+    unite_solide: Optional[str] = None
+    unite_liquide: Optional[str] = None
 
 # Ligne de facture
 class LigneFacture(BaseModel):
