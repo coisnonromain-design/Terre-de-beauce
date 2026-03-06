@@ -10,6 +10,7 @@ import Chantiers from "@/pages/Chantiers";
 import Planning from "@/pages/Planning";
 import Pointages from "@/pages/Pointages";
 import Factures from "@/pages/Factures";
+import Contrats from "@/pages/Contrats";
 import ChauffeurPortal from "@/pages/ChauffeurPortal";
 import Configuration from "@/pages/Configuration";
 
