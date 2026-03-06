@@ -926,6 +926,30 @@ export default function Chantiers() {
                   </div>
                 </div>
 
+                {/* Type de transport et option gasoil */}
+                <div className="flex gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-sm">Type:</span>
+                    <Badge variant="outline">
+                      {viewingChantier.transport_type === "liquide" ? (
+                        <><Droplets className="w-3 h-3 mr-1" /> Liquide</>
+                      ) : (
+                        <><Container className="w-3 h-3 mr-1" /> Solide</>
+                      )}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-sm">Gasoil:</span>
+                    <Badge 
+                      variant="outline" 
+                      className={viewingChantier.avec_gasoil !== false ? "border-green-500 text-green-700" : "border-orange-500 text-orange-700"}
+                    >
+                      <Fuel className="w-3 h-3 mr-1" />
+                      {viewingChantier.avec_gasoil !== false ? "Fourni" : "Non fourni"}
+                    </Badge>
+                  </div>
+                </div>
+
                 {viewingChantier.tarifs?.length > 0 && (
                   <div>
                     <span className="text-muted-foreground text-sm block mb-2">Tarification</span>
