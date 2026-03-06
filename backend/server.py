@@ -357,7 +357,59 @@ class Facture(FactureBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# Contrat de transport
+# Contrat CCPA (Contrat Cadre de Prestations Agricoles)
+class ContratCCPA(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    numero_contrat: str  # Numéro unique du contrat
+    chantier_id: str  # Lien avec le chantier
+    client_id: str
+    
+    # Informations client (modifiables - zones jaunes)
+    client_nom: str = ""
+    client_interlocuteur: str = ""
+    client_adresse: str = ""
+    client_email: str = ""
+    client_telephone: str = ""
+    
+    # Tarification (modifiable - zone jaune)
+    prix_unitaire: float = 0
+    unite_facturation: str = ""  # "heure", "tonne", "m³", "jour", etc.
+    
+    # Option gasoil (héritée du chantier)
+    gasoil_fourni: bool = True
+    transport_type: TransportType = TransportType.SOLIDE
+    
+    # Dates
+    date_creation: str = ""
+    date_signature: Optional[str] = None
+    
+    # Statut
+    statut: ContratStatus = ContratStatus.BROUILLON
+    
+    # DocuSign
+    docusign_envelope_id: Optional[str] = None
+    
+    # Métadonnées
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class ContratCCPACreate(BaseModel):
+    chantier_id: str
+    # Les autres champs sont pré-remplis depuis le chantier/client
+
+class ContratCCPAUpdate(BaseModel):
+    client_nom: Optional[str] = None
+    client_interlocuteur: Optional[str] = None
+    client_adresse: Optional[str] = None
+    client_email: Optional[str] = None
+    client_telephone: Optional[str] = None
+    prix_unitaire: Optional[float] = None
+    unite_facturation: Optional[str] = None
+    date_signature: Optional[str] = None
+    statut: Optional[ContratStatus] = None
+
+# Ancien modèle de contrat (gardé pour compatibilité)
 class ContratBase(BaseModel):
     client_id: str
     type_transport: TransportType
