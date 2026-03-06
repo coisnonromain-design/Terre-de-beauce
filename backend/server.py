@@ -1762,6 +1762,345 @@ def generate_facture_html(facture: dict, config: dict) -> str:
     """
     return html
 
+def generate_contrat_ccpa_html(contrat: dict, config: dict) -> str:
+    """Generate HTML content for a CCPA contract"""
+    
+    gasoil_text = "Carburant fourni par la Donneuse d'ordres" if contrat.get('gasoil_fourni', True) else "Carburant non fourni (à charge du Prestataire)"
+    transport_type = "solide (céréales, matières premières...)" if contrat.get('transport_type') == 'solide' else "liquide (engrais, produits phytosanitaires...)"
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; color: #333; line-height: 1.6; }}
+            .header {{ text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1A4D2E; padding-bottom: 20px; }}
+            .header h1 {{ color: #1A4D2E; margin: 0; font-size: 22px; }}
+            .header .numero {{ font-size: 14px; color: #666; margin-top: 5px; }}
+            .parties {{ display: flex; justify-content: space-between; margin-bottom: 30px; }}
+            .party {{ width: 48%; padding: 15px; background: #f9f9f9; border-radius: 5px; }}
+            .party-title {{ font-size: 12px; color: #1A4D2E; text-transform: uppercase; font-weight: bold; margin-bottom: 10px; }}
+            .article {{ margin-bottom: 20px; }}
+            .article h3 {{ color: #1A4D2E; font-size: 14px; margin-bottom: 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }}
+            .article p {{ margin: 5px 0; font-size: 13px; }}
+            .prix-box {{ background: #e8f5e9; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+            .prix-box .amount {{ font-size: 20px; font-weight: bold; color: #1A4D2E; }}
+            .signature {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; }}
+            .signature-grid {{ display: flex; justify-content: space-between; }}
+            .signature-box {{ width: 45%; text-align: center; }}
+            .signature-label {{ font-size: 12px; color: #666; margin-bottom: 10px; }}
+            .signature-line {{ border-bottom: 1px solid #333; height: 60px; margin-bottom: 5px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>CONTRAT CADRE DE PRESTATIONS AGRICOLES</h1>
+            <div class="numero">N° {contrat.get('numero_contrat', '')}</div>
+        </div>
+        
+        <div class="parties">
+            <div class="party">
+                <div class="party-title">Prestataire de services</div>
+                <p><strong>{config.get('raison_sociale', 'TERRE DE BEAUCE LOCATION')}</strong></p>
+                <p>{config.get('adresse', '')}</p>
+                <p>{config.get('code_postal', '')} {config.get('ville', '')}</p>
+                <p>SIRET: {config.get('siret', '')}</p>
+            </div>
+            <div class="party">
+                <div class="party-title">Donneuse d'ordres</div>
+                <p><strong>{contrat.get('client_nom', '')}</strong></p>
+                {f"<p>Contact: {contrat.get('client_interlocuteur')}</p>" if contrat.get('client_interlocuteur') else ""}
+                <p>{contrat.get('client_adresse', '')}</p>
+                <p>{contrat.get('client_email', '')}</p>
+                <p>{contrat.get('client_telephone', '')}</p>
+            </div>
+        </div>
+        
+        <div class="article">
+            <h3>Article 1 - Objet du contrat</h3>
+            <p>Le présent contrat a pour objet de définir les conditions dans lesquelles le Prestataire effectuera des prestations de transport agricole pour le compte de la Donneuse d'ordres.</p>
+        </div>
+        
+        <div class="article">
+            <h3>Article 2 - Nature des prestations</h3>
+            <p><strong>Type de transport:</strong> Transport de marchandises {transport_type}</p>
+            <p><strong>Carburant:</strong> {gasoil_text}</p>
+        </div>
+        
+        <div class="article">
+            <h3>Article 3 - Prix</h3>
+            <div class="prix-box">
+                <p>Toutes les prestations seront facturées au tarif de:</p>
+                <p class="amount">{contrat.get('prix_unitaire', 0):.2f} €HT par {contrat.get('unite_facturation', 'unité')}</p>
+            </div>
+        </div>
+        
+        <div class="article">
+            <h3>Article 4 - Modalités de paiement</h3>
+            <p>Les factures sont payables sous 30 jours à compter de la date d'envoi de la facture par mail.</p>
+            <p>En cas de retard de paiement, des pénalités seront appliquées conformément à la législation en vigueur.</p>
+        </div>
+        
+        <div class="article">
+            <h3>Article 5 - Durée</h3>
+            <p>Le présent contrat est conclu pour une durée indéterminée. Il peut être résilié par l'une ou l'autre des parties avec un préavis de 30 jours.</p>
+        </div>
+        
+        <div class="signature">
+            <p style="text-align: center; font-size: 12px; color: #666;">Fait en deux exemplaires originaux</p>
+            <div class="signature-grid">
+                <div class="signature-box">
+                    <div class="signature-label">Le Prestataire</div>
+                    <div class="signature-line"></div>
+                    <p style="font-size: 11px;">{config.get('raison_sociale', '')}</p>
+                </div>
+                <div class="signature-box">
+                    <div class="signature-label">La Donneuse d'ordres (Bon pour accord)</div>
+                    <p>/sn1/</p>
+                    <p style="font-size: 11px;">{contrat.get('client_nom', '')}</p>
+                </div>
+            </div>
+        </div>
+        
+        <p style="margin-top: 30px; font-size: 11px; color: #666; text-align: center;">
+            {config.get('raison_sociale', '')} - SIRET: {config.get('siret', '')} - {config.get('email', '')}
+        </p>
+    </body>
+    </html>
+    """
+    return html
+
+@api_router.post("/docusign/send-contrat/{contrat_id}")
+async def send_contrat_for_signature(contrat_id: str, signer_email: str, signer_name: str):
+    """Send a CCPA contract for electronic signature"""
+    
+    if not docusign_tokens.get("access_token"):
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié. Veuillez vous connecter d'abord.")
+    
+    # Get contrat
+    contrat = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
+    if not contrat:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    
+    # Get entreprise config
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    if not config:
+        config = {"raison_sociale": "Terre de Beauce"}
+    
+    # Generate HTML document for the contrat
+    html_content = generate_contrat_ccpa_html(contrat, config)
+    
+    try:
+        # Create API client
+        api_client = ApiClient()
+        api_client.host = DOCUSIGN_BASE_URL
+        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        
+        # Create envelope
+        envelope_definition = EnvelopeDefinition(
+            email_subject=f"Contrat CCPA {contrat['numero_contrat']} - {config.get('raison_sociale')} - Signature requise",
+            email_blurb=f"Veuillez signer le contrat CCPA {contrat['numero_contrat']} de {config.get('raison_sociale')}.",
+            documents=[
+                Document(
+                    document_base64=base64.b64encode(html_content.encode()).decode(),
+                    name=f"Contrat_{contrat['numero_contrat']}.html",
+                    file_extension="html",
+                    document_id="1"
+                )
+            ],
+            recipients=Recipients(
+                signers=[
+                    Signer(
+                        email=signer_email,
+                        name=signer_name,
+                        recipient_id="1",
+                        routing_order="1",
+                        tabs=Tabs(
+                            sign_here_tabs=[
+                                SignHere(
+                                    anchor_string="/sn1/",
+                                    anchor_units="pixels",
+                                    anchor_x_offset="20",
+                                    anchor_y_offset="10"
+                                )
+                            ]
+                        )
+                    )
+                ]
+            ),
+            status="sent"
+        )
+        
+        # Send envelope
+        envelopes_api = EnvelopesApi(api_client)
+        result = envelopes_api.create_envelope(DOCUSIGN_ACCOUNT_ID, envelope_definition=envelope_definition)
+        
+        # Update contrat with envelope ID and status
+        await db.contrats_ccpa.update_one(
+            {"id": contrat_id},
+            {"$set": {
+                "docusign_envelope_id": result.envelope_id,
+                "docusign_status": "sent",
+                "docusign_sent_at": datetime.now(timezone.utc).isoformat(),
+                "docusign_signer_email": signer_email,
+                "docusign_signer_name": signer_name,
+                "statut": "envoye"
+            }}
+        )
+        
+        return {
+            "success": True,
+            "envelope_id": result.envelope_id,
+            "message": f"Contrat envoyé à {signer_email} pour signature"
+        }
+        
+    except Exception as e:
+        logger.error(f"DocuSign error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
+
+@api_router.post("/docusign/sync-status/{document_type}/{document_id}")
+async def sync_docusign_status(document_type: str, document_id: str):
+    """Synchronize DocuSign status for a facture or contrat"""
+    
+    if document_type not in ["facture", "contrat"]:
+        raise HTTPException(status_code=400, detail="Type de document invalide. Utilisez 'facture' ou 'contrat'")
+    
+    if not docusign_tokens.get("access_token"):
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié")
+    
+    # Get document
+    if document_type == "facture":
+        doc = await db.factures.find_one({"id": document_id}, {"_id": 0})
+        collection = db.factures
+    else:
+        doc = await db.contrats_ccpa.find_one({"id": document_id}, {"_id": 0})
+        collection = db.contrats_ccpa
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"{document_type.capitalize()} non trouvé")
+    
+    envelope_id = doc.get("docusign_envelope_id")
+    if not envelope_id:
+        raise HTTPException(status_code=400, detail="Ce document n'a pas été envoyé pour signature")
+    
+    try:
+        api_client = ApiClient()
+        api_client.host = DOCUSIGN_BASE_URL
+        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        
+        envelopes_api = EnvelopesApi(api_client)
+        envelope = envelopes_api.get_envelope(DOCUSIGN_ACCOUNT_ID, envelope_id)
+        
+        # Map DocuSign status to our status
+        docusign_status = envelope.status
+        new_statut = doc.get("statut")
+        
+        if docusign_status == "completed":
+            new_statut = "signe" if document_type == "contrat" else "payee"
+        elif docusign_status == "declined":
+            new_statut = "annule" if document_type == "contrat" else "annulee"
+        elif docusign_status == "voided":
+            new_statut = "annule" if document_type == "contrat" else "annulee"
+        elif docusign_status == "sent":
+            new_statut = "envoye" if document_type == "contrat" else "envoyee"
+        
+        # Update document
+        update_data = {
+            "docusign_status": docusign_status,
+            "statut": new_statut
+        }
+        
+        if envelope.completed_date_time and docusign_status == "completed":
+            if document_type == "contrat":
+                update_data["date_signature"] = envelope.completed_date_time[:10]
+            update_data["docusign_completed_at"] = envelope.completed_date_time
+        
+        await collection.update_one({"id": document_id}, {"$set": update_data})
+        
+        updated_doc = await collection.find_one({"id": document_id}, {"_id": 0})
+        
+        return {
+            "envelope_id": envelope_id,
+            "docusign_status": docusign_status,
+            "document_status": new_statut,
+            "sent_date": envelope.sent_date_time,
+            "completed_date": envelope.completed_date_time,
+            "document": updated_doc
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
+
+@api_router.post("/docusign/sync-all")
+async def sync_all_docusign_statuses():
+    """Synchronize DocuSign status for all pending documents"""
+    
+    if not docusign_tokens.get("access_token"):
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié")
+    
+    results = {"factures": [], "contrats": [], "errors": []}
+    
+    try:
+        api_client = ApiClient()
+        api_client.host = DOCUSIGN_BASE_URL
+        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        envelopes_api = EnvelopesApi(api_client)
+        
+        # Sync factures
+        factures = await db.factures.find(
+            {"docusign_envelope_id": {"$exists": True, "$ne": None}, "statut": {"$in": ["envoyee", "en_attente"]}},
+            {"_id": 0}
+        ).to_list(100)
+        
+        for facture in factures:
+            try:
+                envelope = envelopes_api.get_envelope(DOCUSIGN_ACCOUNT_ID, facture["docusign_envelope_id"])
+                new_statut = facture["statut"]
+                
+                if envelope.status == "completed":
+                    new_statut = "payee"
+                elif envelope.status in ["declined", "voided"]:
+                    new_statut = "annulee"
+                
+                await db.factures.update_one(
+                    {"id": facture["id"]},
+                    {"$set": {"docusign_status": envelope.status, "statut": new_statut}}
+                )
+                results["factures"].append({"id": facture["id"], "status": envelope.status})
+            except Exception as e:
+                results["errors"].append({"type": "facture", "id": facture["id"], "error": str(e)})
+        
+        # Sync contrats
+        contrats = await db.contrats_ccpa.find(
+            {"docusign_envelope_id": {"$exists": True, "$ne": None}, "statut": "envoye"},
+            {"_id": 0}
+        ).to_list(100)
+        
+        for contrat in contrats:
+            try:
+                envelope = envelopes_api.get_envelope(DOCUSIGN_ACCOUNT_ID, contrat["docusign_envelope_id"])
+                new_statut = contrat["statut"]
+                update_data = {"docusign_status": envelope.status}
+                
+                if envelope.status == "completed":
+                    new_statut = "signe"
+                    if envelope.completed_date_time:
+                        update_data["date_signature"] = envelope.completed_date_time[:10]
+                elif envelope.status in ["declined", "voided"]:
+                    new_statut = "annule"
+                
+                update_data["statut"] = new_statut
+                await db.contrats_ccpa.update_one({"id": contrat["id"]}, {"$set": update_data})
+                results["contrats"].append({"id": contrat["id"], "status": envelope.status})
+            except Exception as e:
+                results["errors"].append({"type": "contrat", "id": contrat["id"], "error": str(e)})
+        
+        return results
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
+
 # Include the router in the main app
 app.include_router(api_router)
 
