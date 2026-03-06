@@ -1,0 +1,580 @@
+import { useEffect, useState } from "react";
+import axios from "axios";
+import { toast } from "sonner";
+import {
+  FileText,
+  Plus,
+  Eye,
+  Send,
+  Check,
+  Search,
+  Download,
+  Euro,
+  Calendar,
+  Building2,
+  Trash2,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+const statusConfig = {
+  brouillon: { label: "Brouillon", class: "bg-slate-100 text-slate-600 border-slate-200" },
+  emise: { label: "Émise", class: "bg-blue-100 text-blue-700 border-blue-200" },
+  envoyee: { label: "Envoyée", class: "bg-indigo-100 text-indigo-700 border-indigo-200" },
+  signee: { label: "Signée", class: "bg-green-100 text-green-700 border-green-200" },
+  payee: { label: "Payée", class: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+};
+
+export default function Factures() {
+  const [factures, setFactures] = useState([]);
+  const [chantiers, setChantiers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [viewingFacture, setViewingFacture] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [factureToDelete, setFactureToDelete] = useState(null);
+  const [entrepriseConfig, setEntrepriseConfig] = useState(null);
+
+  const [form, setForm] = useState({
+    chantier_id: "",
+    date_echeance: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [facturesRes, chantiersRes, configRes] = await Promise.all([
+        axios.get(`${API}/factures`),
+        axios.get(`${API}/chantiers`),
+        axios.get(`${API}/config/entreprise`),
+      ]);
+      setFactures(facturesRes.data);
+      // Filtrer les chantiers terminés ou en cours
+      setChantiers(chantiersRes.data.filter(c => c.statut === "en_cours" || c.statut === "termine"));
+      setEntrepriseConfig(configRes.data);
+    } catch (error) {
+      toast.error("Erreur lors du chargement des données");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateFacture = async () => {
+    if (!form.chantier_id || !form.date_echeance) {
+      toast.error("Veuillez sélectionner un chantier et une date d'échéance");
+      return;
+    }
+
+    try {
+      await axios.post(`${API}/factures/generer`, form);
+      toast.success("Facture générée avec succès");
+      setDialogOpen(false);
+      setForm({ chantier_id: "", date_echeance: "", notes: "" });
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de la génération");
+    }
+  };
+
+  const handleUpdateStatut = async (factureId, newStatut) => {
+    try {
+      await axios.put(`${API}/factures/${factureId}/statut?statut=${newStatut}`);
+      toast.success("Statut mis à jour");
+      fetchData();
+      if (viewingFacture?.id === factureId) {
+        setViewingFacture({ ...viewingFacture, statut: newStatut });
+      }
+    } catch (error) {
+      toast.error("Erreur lors de la mise à jour");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!factureToDelete) return;
+    try {
+      await axios.delete(`${API}/factures/${factureToDelete.id}`);
+      toast.success("Facture supprimée");
+      fetchData();
+    } catch (error) {
+      toast.error("Erreur lors de la suppression");
+    } finally {
+      setDeleteDialogOpen(false);
+      setFactureToDelete(null);
+    }
+  };
+
+  const filteredFactures = factures.filter((f) => {
+    const matchesSearch =
+      f.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (f.client_raison_sociale && f.client_raison_sociale.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesStatus = statusFilter === "all" || f.statut === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalEnAttente = factures
+    .filter(f => ["brouillon", "emise", "envoyee"].includes(f.statut))
+    .reduce((sum, f) => sum + (f.montant_ttc || 0), 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1A4D2E]"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="factures-page">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-bold font-['Barlow_Condensed'] tracking-tight">
+            Facturation
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {factures.length} facture(s) • {totalEnAttente.toLocaleString('fr-FR')} € en attente
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 w-48"
+              data-testid="search-facture-input"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-36" data-testid="status-filter">
+              <SelectValue placeholder="Statut" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous</SelectItem>
+              <SelectItem value="brouillon">Brouillon</SelectItem>
+              <SelectItem value="emise">Émise</SelectItem>
+              <SelectItem value="envoyee">Envoyée</SelectItem>
+              <SelectItem value="signee">Signée</SelectItem>
+              <SelectItem value="payee">Payée</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            onClick={() => setDialogOpen(true)}
+            className="bg-[#1A4D2E] hover:bg-[#143d24]"
+            data-testid="generate-facture-btn"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Générer facture
+          </Button>
+        </div>
+      </div>
+
+      {/* Factures Table */}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="text-xl font-['Barlow_Condensed'] flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[#D9A520]" />
+            Liste des factures
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {filteredFactures.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground">
+              <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>Aucune facture trouvée</p>
+              <p className="text-sm">Générez une facture à partir d'un chantier terminé</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>N° Facture</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Chantier</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Montant TTC</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className="w-28">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredFactures.map((facture) => (
+                  <TableRow key={facture.id} data-testid={`facture-row-${facture.id}`}>
+                    <TableCell className="font-mono font-medium">
+                      {facture.numero}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-muted-foreground" />
+                        {facture.client_raison_sociale}
+                      </div>
+                    </TableCell>
+                    <TableCell>{facture.chantier_reference}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                        {new Date(facture.date_emission).toLocaleDateString("fr-FR")}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {facture.montant_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={`${statusConfig[facture.statut]?.class} border`}>
+                        {statusConfig[facture.statut]?.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setViewingFacture(facture);
+                            setDetailDialogOpen(true);
+                          }}
+                          data-testid={`view-facture-${facture.id}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {facture.statut === "brouillon" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleUpdateStatut(facture.id, "emise")}
+                            data-testid={`emit-facture-${facture.id}`}
+                          >
+                            <Check className="w-4 h-4 text-green-600" />
+                          </Button>
+                        )}
+                        {facture.statut === "brouillon" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setFactureToDelete(facture);
+                              setDeleteDialogOpen(true);
+                            }}
+                            data-testid={`delete-facture-${facture.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Generate Facture Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-['Barlow_Condensed'] text-2xl">
+              Générer une facture
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div>
+              <Label>Chantier *</Label>
+              <Select
+                value={form.chantier_id}
+                onValueChange={(value) => setForm({ ...form, chantier_id: value })}
+              >
+                <SelectTrigger data-testid="select-chantier">
+                  <SelectValue placeholder="Sélectionner un chantier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {chantiers.map((chantier) => (
+                    <SelectItem key={chantier.id} value={chantier.id}>
+                      {chantier.reference} - {chantier.client_nom}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                La facture sera générée à partir des pointages du chantier
+              </p>
+            </div>
+            <div>
+              <Label>Date d'échéance *</Label>
+              <Input
+                type="date"
+                value={form.date_echeance}
+                onChange={(e) => setForm({ ...form, date_echeance: e.target.value })}
+                data-testid="date-echeance-input"
+              />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Input
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Notes additionnelles..."
+                data-testid="notes-input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleGenerateFacture}
+              className="bg-[#1A4D2E] hover:bg-[#143d24]"
+              data-testid="confirm-generate-btn"
+            >
+              Générer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Facture Detail Dialog */}
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-['Barlow_Condensed'] text-2xl flex items-center gap-2">
+              <FileText className="w-6 h-6 text-[#D9A520]" />
+              Facture {viewingFacture?.numero}
+            </DialogTitle>
+          </DialogHeader>
+          {viewingFacture && (
+            <div className="space-y-6">
+              {/* En-tête facture */}
+              <div className="grid grid-cols-2 gap-6 p-4 bg-muted/30 rounded-lg">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase mb-2">Émetteur</p>
+                  <p className="font-semibold">{entrepriseConfig?.raison_sociale}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {entrepriseConfig?.adresse}<br />
+                    {entrepriseConfig?.code_postal} {entrepriseConfig?.ville}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    SIRET: {entrepriseConfig?.siret}<br />
+                    TVA: {entrepriseConfig?.tva_intracommunautaire}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase mb-2">Client</p>
+                  <p className="font-semibold">{viewingFacture.client_raison_sociale}</p>
+                  <p className="text-sm text-muted-foreground">{viewingFacture.client_adresse}</p>
+                  {viewingFacture.client_siret && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      SIRET: {viewingFacture.client_siret}
+                    </p>
+                  )}
+                  {viewingFacture.client_tva && (
+                    <p className="text-sm text-muted-foreground">
+                      TVA: {viewingFacture.client_tva}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Infos facture */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Date émission</p>
+                  <p className="font-medium">{new Date(viewingFacture.date_emission).toLocaleDateString("fr-FR")}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Échéance</p>
+                  <p className="font-medium">{new Date(viewingFacture.date_echeance).toLocaleDateString("fr-FR")}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Statut</p>
+                  <Badge className={`${statusConfig[viewingFacture.statut]?.class} border mt-1`}>
+                    {statusConfig[viewingFacture.statut]?.label}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Référence chantier */}
+              <div className="p-3 bg-muted/30 rounded-lg">
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Chantier:</span>{" "}
+                  <span className="font-medium">{viewingFacture.chantier_reference}</span>
+                  {viewingFacture.chantier_lieu && (
+                    <span className="text-muted-foreground"> - {viewingFacture.chantier_lieu}</span>
+                  )}
+                </p>
+              </div>
+
+              <Separator />
+
+              {/* Lignes de facture */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase mb-3">Détail</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Qté</TableHead>
+                      <TableHead className="text-right">P.U. HT</TableHead>
+                      <TableHead className="text-right">Total HT</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {viewingFacture.lignes?.map((ligne, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{ligne.description}</TableCell>
+                        <TableCell className="text-right">
+                          {ligne.quantite} {ligne.unite}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {ligne.prix_unitaire?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {ligne.montant_ht?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Totaux */}
+              <div className="flex justify-end">
+                <div className="w-64 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total HT</span>
+                    <span className="font-medium">
+                      {viewingFacture.montant_ht?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">TVA ({viewingFacture.taux_tva}%)</span>
+                    <span>
+                      {viewingFacture.montant_tva?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between text-lg font-bold">
+                    <span>Total TTC</span>
+                    <span className="text-[#1A4D2E]">
+                      {viewingFacture.montant_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                {viewingFacture.statut === "brouillon" && (
+                  <Button
+                    onClick={() => handleUpdateStatut(viewingFacture.id, "emise")}
+                    className="bg-[#1A4D2E] hover:bg-[#143d24]"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    Valider et émettre
+                  </Button>
+                )}
+                {viewingFacture.statut === "emise" && (
+                  <Button
+                    onClick={() => handleUpdateStatut(viewingFacture.id, "envoyee")}
+                    variant="outline"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Marquer envoyée
+                  </Button>
+                )}
+                {viewingFacture.statut === "envoyee" && (
+                  <Button
+                    onClick={() => handleUpdateStatut(viewingFacture.id, "signee")}
+                    variant="outline"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    Marquer signée
+                  </Button>
+                )}
+                {viewingFacture.statut === "signee" && (
+                  <Button
+                    onClick={() => handleUpdateStatut(viewingFacture.id, "payee")}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    <Euro className="w-4 h-4 mr-2" />
+                    Marquer payée
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer la facture{" "}
+              <strong>{factureToDelete?.numero}</strong> ?
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

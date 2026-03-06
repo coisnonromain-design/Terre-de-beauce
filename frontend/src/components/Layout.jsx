@@ -6,6 +6,8 @@ import {
   Building2,
   HardHat,
   CalendarDays,
+  ClipboardList,
+  FileText,
   Settings,
   ChevronRight,
   Menu,
@@ -21,6 +23,8 @@ const navigation = [
   { name: "Clients", href: "/clients", icon: Building2 },
   { name: "Chantiers", href: "/chantiers", icon: HardHat },
   { name: "Planning", href: "/planning", icon: CalendarDays },
+  { name: "Pointages", href: "/pointages", icon: ClipboardList },
+  { name: "Factures", href: "/factures", icon: FileText },
 ];
 
 const getPageTitle = (pathname) => {
@@ -68,10 +72,17 @@ export const Layout = () => {
       </nav>
 
       <div className="p-4 border-t border-white/10">
-        <button className="sidebar-nav-item w-full" data-testid="nav-settings">
+        <NavLink 
+          to="/configuration"
+          onClick={() => setMobileOpen(false)}
+          className={({ isActive }) =>
+            `sidebar-nav-item w-full ${isActive ? "active" : ""}`
+          }
+          data-testid="nav-configuration"
+        >
           <Settings className="w-5 h-5" />
-          <span>Paramètres</span>
-        </button>
+          <span>Configuration</span>
+        </NavLink>
       </div>
     </>
   );
@@ -112,6 +123,14 @@ export const Layout = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <a 
+              href="/chauffeur" 
+              target="_blank"
+              className="text-sm text-[#1A4D2E] hover:underline"
+              data-testid="chauffeur-portal-link"
+            >
+              Accès Chauffeur
+            </a>
             <div className="w-8 h-8 rounded-full bg-[#1A4D2E] flex items-center justify-center text-white text-sm font-medium">
               TB
             </div>
