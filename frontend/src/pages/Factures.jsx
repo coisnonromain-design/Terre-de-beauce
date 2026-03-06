@@ -78,6 +78,10 @@ export default function Factures() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [factureToDelete, setFactureToDelete] = useState(null);
   const [entrepriseConfig, setEntrepriseConfig] = useState(null);
+  const [docusignStatus, setDocusignStatus] = useState(null);
+  const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
+  const [signatureForm, setSignatureForm] = useState({ email: "", name: "" });
+  const [sendingSignature, setSendingSignature] = useState(false);
 
   const [form, setForm] = useState({
     chantier_id: "",
@@ -87,6 +91,7 @@ export default function Factures() {
 
   useEffect(() => {
     fetchData();
+    checkDocusignStatus();
   }, []);
 
   const fetchData = async () => {
@@ -104,6 +109,49 @@ export default function Factures() {
       toast.error("Erreur lors du chargement des données");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkDocusignStatus = async () => {
+    try {
+      const res = await axios.get(`${API}/docusign/status`);
+      setDocusignStatus(res.data);
+    } catch (error) {
+      setDocusignStatus({ configured: false, authenticated: false });
+    }
+  };
+
+  const handleDocusignAuth = async () => {
+    try {
+      const redirectUri = `${window.location.origin}/docusign-callback`;
+      const res = await axios.get(`${API}/docusign/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}`);
+      window.open(res.data.auth_url, "_blank", "width=600,height=700");
+    } catch (error) {
+      toast.error("Erreur lors de la connexion DocuSign");
+    }
+  };
+
+  const handleSendForSignature = async () => {
+    if (!signatureForm.email || !signatureForm.name) {
+      toast.error("Veuillez remplir l'email et le nom du signataire");
+      return;
+    }
+
+    setSendingSignature(true);
+    try {
+      const res = await axios.post(
+        `${API}/docusign/send-facture/${viewingFacture.id}?signer_email=${encodeURIComponent(signatureForm.email)}&signer_name=${encodeURIComponent(signatureForm.name)}`
+      );
+      toast.success(res.data.message);
+      setSignatureDialogOpen(false);
+      setSignatureForm({ email: "", name: "" });
+      fetchData();
+      // Update viewing facture
+      setViewingFacture({ ...viewingFacture, statut: "envoyee", docusign_envelope_id: res.data.envelope_id });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de l'envoi");
+    } finally {
+      setSendingSignature(false);
     }
   };
 
