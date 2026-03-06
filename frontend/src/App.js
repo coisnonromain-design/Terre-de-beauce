@@ -32,6 +32,7 @@ function App() {
             <Route path="planning" element={<Planning />} />
             <Route path="pointages" element={<Pointages />} />
             <Route path="factures" element={<Factures />} />
+            <Route path="contrats" element={<Contrats />} />
             <Route path="configuration" element={<Configuration />} />
           </Route>
         </Routes>
