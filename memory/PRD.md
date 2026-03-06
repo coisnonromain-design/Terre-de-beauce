@@ -96,8 +96,9 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [x] Configuration DocuSign (clés API fournies)
 - [x] Intégration signature électronique factures
 - [x] Ajouter option "gasoil fourni" sur les chantiers
+- [x] Contrats CCPA liés aux chantiers
 - [ ] Implémenter logique de facturation complexe (barèmes + minima horaire)
-- [ ] Contrats de transport (modèle à fournir par client)
+- [ ] Lien entre numéro de contrat et numéro de facture
 
 ### P2 (Souhaitable) - À FAIRE
 - [ ] Export PDF des factures
