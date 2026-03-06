@@ -475,7 +475,9 @@ async def get_baremes_config():
         default_baremes = generate_default_baremes()
         doc = default_baremes.model_dump()
         await db.config.insert_one(doc)
-        return doc
+        # Récupérer le doc sans _id
+        config = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+        return config
     return config
 
 @api_router.put("/config/baremes")
