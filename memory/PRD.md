@@ -101,6 +101,6 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [ ] Géolocalisation des tracteurs
 
 ## Next Tasks
-1. **Option gasoil sur chantiers** - Ajouter case à cocher "Gasoil fourni" sur la page Chantiers
-2. **Logique facturation complexe** - Implémenter le calcul avec barèmes et minima horaire
+1. **Logique de facturation complexe** - Implémenter le calcul avec barèmes kilométriques et règle du minima horaire
+2. **Refonte portail chauffeur** - Permettre la saisie des tours (volume + distance) par jour
 3. **Modèle de contrat** - Attendre le modèle de contrat de transport du client
