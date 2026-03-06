@@ -375,13 +375,19 @@ export default function Factures() {
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Montant TTC</TableHead>
                   <TableHead>Statut</TableHead>
-                  <TableHead className="w-28">Actions</TableHead>
+                  <TableHead>Signature DocuSign</TableHead>
+                  <TableHead className="w-32">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredFactures.map((facture) => (
+                {filteredFactures.map((facture) => {
+                  const StatusIcon = statusConfig[facture.statut]?.icon || FileText;
+                  const docuStatus = facture.docusign_status ? docusignStatusConfig[facture.docusign_status] : null;
+                  const DocuIcon = docuStatus?.icon || Clock;
+                  
+                  return (
                   <TableRow key={facture.id} data-testid={`facture-row-${facture.id}`}>
-                    <TableCell className="font-mono font-medium">
+                    <TableCell className="font-mono font-medium text-[#1A4D2E]">
                       {facture.numero}
                     </TableCell>
                     <TableCell>
@@ -402,8 +408,31 @@ export default function Factures() {
                     </TableCell>
                     <TableCell>
                       <Badge className={`${statusConfig[facture.statut]?.class} border`}>
+                        <StatusIcon className="w-3 h-3 mr-1" />
                         {statusConfig[facture.statut]?.label}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {facture.docusign_envelope_id ? (
+                        <div className="flex flex-col gap-1">
+                          <Badge className={`${docuStatus?.class || 'bg-gray-50 text-gray-600'} text-xs`}>
+                            <DocuIcon className="w-3 h-3 mr-1" />
+                            {docuStatus?.label || facture.docusign_status}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => syncDocuSignStatus(facture.id)}
+                            disabled={syncingStatus}
+                          >
+                            <RefreshCw className={`w-3 h-3 mr-1 ${syncingStatus ? 'animate-spin' : ''}`} />
+                            Actualiser
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
@@ -428,6 +457,21 @@ export default function Factures() {
                             <Check className="w-4 h-4 text-green-600" />
                           </Button>
                         )}
+                        {(facture.statut === "emise" || facture.statut === "brouillon") && docusignStatus?.authenticated && !facture.docusign_envelope_id && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setViewingFacture(facture);
+                              setSignatureForm({ email: facture.client_email || "", name: facture.client_raison_sociale || "" });
+                              setSignatureDialogOpen(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-700"
+                            data-testid={`send-docusign-facture-${facture.id}`}
+                          >
+                            <Send className="w-4 h-4" />
+                          </Button>
+                        )}
                         {facture.statut === "brouillon" && (
                           <Button
                             variant="ghost"
@@ -444,7 +488,8 @@ export default function Factures() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}
