@@ -1,69 +1,91 @@
 # PRD - Terre de Beauce ERP
 
 ## Original Problem Statement
-Construire un ERP complet pour "Terre de Beauce", une société de transport agricole avec tracteurs (identifiés par lettres), remorques solides (numéros), citernes liquides (numéros), bennes TP (numéros). Gestion complète: chauffeurs, clients (SIREN, SIRET, TVA, adresse), chantiers avec affectations tracteur + remorque + chauffeur, et planning calendrier.
+Construire un ERP complet pour "Terre de Beauce", une société de transport agricole avec tracteurs (identifiés par lettres), remorques solides (numéros), citernes liquides (numéros), bennes TP (numéros). 
+
+### Fonctionnalités demandées:
+- Gestion complète: chauffeurs, clients (SIREN, SIRET, TVA, adresse), chantiers avec affectations tracteur + remorque + chauffeur
+- Tarification client combinée (€/h, €/tonne, €/jour)
+- Interface chauffeur pour saisie des heures et volumes
+- Génération automatique de factures
+- Signature électronique (DocuSign - en attente des clés API)
+
+### Informations Entreprise
+- Raison sociale: Terre de Beauce
+- Adresse: Ferme de Mennessard, 91660 Le Mérévillois
+- SIREN: 953286333
+- SIRET: 95328633300018
+- TVA: FR57953286333
+- Email: r.coisnon@terredebeauce.com
 
 ## User Personas
 1. **Gestionnaire de flotte** - Gère les tracteurs, remorques, citernes et bennes
-2. **Responsable planning** - Crée et affecte les chantiers
-3. **Administratif** - Gère les clients et leur facturation
-
-## Core Requirements (Static)
-- Gestion de flotte (tracteurs A-Z, équipements numérotés)
-- Gestion des chauffeurs (disponibilité, permis)
-- Gestion des clients (raison sociale, SIREN, SIRET, TVA intracommunautaire, adresse complète)
-- Gestion des chantiers (création, affectation tracteur + équipement + chauffeur)
-- Vue planning calendrier
+2. **Responsable planning** - Crée et affecte les chantiers, définit les tarifs
+3. **Administratif** - Gère les clients, factures et contrats
+4. **Chauffeur** - Saisit ses heures et volumes via le portail chauffeur
 
 ## Architecture
 - **Frontend**: React 19 + Tailwind CSS + Shadcn/UI
 - **Backend**: FastAPI (Python)
 - **Database**: MongoDB
-- **Design**: Beauce Green (#1A4D2E) + Harvest Gold (#D9A520), Barlow Condensed + Inter fonts
+- **Design**: Beauce Green (#1A4D2E) + Harvest Gold (#D9A520)
 
 ## What's Been Implemented
-**Date: Janvier 2026**
+
+### Phase 1 (MVP) - Janvier 2026
 - ✅ Dashboard avec statistiques temps réel
-- ✅ Gestion Flotte (tracteurs, remorques, citernes, bennes) - CRUD complet
-- ✅ Gestion Chauffeurs - CRUD complet avec disponibilité
-- ✅ Gestion Clients - CRUD complet avec tous les champs (SIREN, SIRET, TVA, adresse)
-- ✅ Gestion Chantiers - CRUD avec affectations multiples (tracteur + équipement + chauffeur)
-- ✅ Planning - Vue calendrier mensuelle avec affichage des chantiers
-- ✅ Navigation responsive avec sidebar
-- ✅ Design professionnel adapté au secteur agricole/BTP
+- ✅ Gestion Flotte (tracteurs, remorques, citernes, bennes)
+- ✅ Gestion Chauffeurs avec code d'accès
+- ✅ Gestion Clients (SIREN, SIRET, TVA, adresse)
+- ✅ Gestion Chantiers avec affectations
+- ✅ Planning - Vue calendrier mensuelle
+
+### Phase 2 (Facturation) - Janvier 2026
+- ✅ Tarification client (€/h, €/tonne, €/jour)
+- ✅ Tarification par chantier
+- ✅ Portail Chauffeur (/chauffeur) - Saisie heures et volumes
+- ✅ Page Pointages - Vue consolidée avec filtres
+- ✅ Génération automatique de factures depuis pointages
+- ✅ Configuration entreprise
+- ⏳ Signature électronique DocuSign (en attente des clés API)
 
 ## API Endpoints
 - `GET/POST /api/tracteurs` - Gestion tracteurs
-- `GET/POST /api/equipements` - Gestion équipements (remorques, citernes, bennes)
+- `GET/POST /api/equipements` - Gestion équipements
 - `GET/POST /api/chauffeurs` - Gestion chauffeurs
-- `GET/POST /api/clients` - Gestion clients
-- `GET/POST /api/chantiers` - Gestion chantiers
-- `GET /api/dashboard/stats` - Statistiques tableau de bord
+- `GET/POST /api/clients` - Gestion clients avec tarifs
+- `GET/POST /api/chantiers` - Gestion chantiers avec tarifs
+- `GET /api/chantiers/{id}/recap` - Récapitulatif pointages
+- `GET/POST /api/pointages` - Pointages chauffeurs
+- `POST /api/chauffeur/login` - Authentification chauffeur
+- `GET/POST /api/factures` - Gestion factures
+- `POST /api/factures/generer` - Génération automatique
+- `GET/PUT /api/config/entreprise` - Configuration
 
 ## Prioritized Backlog
 
 ### P0 (Critique) - DONE
 - [x] Structure de base ERP
 - [x] Gestion flotte complète
-- [x] Gestion clients
-- [x] Gestion chauffeurs
-- [x] Gestion chantiers avec affectations
-- [x] Planning calendrier
+- [x] Gestion clients avec tarification
+- [x] Gestion chauffeurs avec code accès
+- [x] Gestion chantiers avec tarifs
+- [x] Portail chauffeur (saisie heures/volumes)
+- [x] Génération factures automatique
 
 ### P1 (Important) - À FAIRE
-- [ ] Authentification utilisateurs (JWT ou Google Auth)
-- [ ] Export PDF/Excel des données
-- [ ] Gestion des documents (carte grise, contrôle technique, permis)
-- [ ] Historique des modifications
+- [ ] Signature électronique DocuSign (clés API requises)
+- [ ] Contrats de transport (modèle fourni par client)
+- [ ] Export PDF des factures
+- [ ] Authentification utilisateurs admin
 
 ### P2 (Souhaitable) - À FAIRE
-- [ ] Notifications (rappels maintenance, échéances documents)
-- [ ] Facturation intégrée
+- [ ] Notifications (rappels maintenance, échéances)
+- [ ] Historique des modifications
 - [ ] Rapports et statistiques avancées
-- [ ] Application mobile
+- [ ] Application mobile chauffeur
 
 ## Next Tasks
-1. Ajouter l'authentification utilisateurs
-2. Implémenter l'export PDF/Excel
-3. Gestion documentaire (upload et suivi des documents)
-4. Module de facturation
+1. **DocuSign** - Fournir les clés API (Integration Key + Secret Key) depuis developers.docusign.com
+2. **Modèle de contrat** - Transmettre le modèle de contrat de transport
+3. **Export PDF** - Génération PDF des factures pour impression/envoi
