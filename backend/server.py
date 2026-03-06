@@ -1051,6 +1051,311 @@ async def get_dashboard_stats():
 async def root():
     return {"message": "Terre de Beauce ERP API", "version": "2.0.0"}
 
+# ============= DOCUSIGN ROUTES =============
+
+class DocuSignOAuthRequest(BaseModel):
+    code: str
+    redirect_uri: str
+
+class DocuSignSendRequest(BaseModel):
+    document_type: str  # "facture" ou "contrat"
+    document_id: str
+    signer_email: str
+    signer_name: str
+
+# Store DocuSign access token in memory (in production, use database or Redis)
+docusign_tokens = {}
+
+@api_router.get("/docusign/auth-url")
+async def get_docusign_auth_url(redirect_uri: str):
+    """Get DocuSign OAuth authorization URL"""
+    if not DOCUSIGN_INTEGRATION_KEY:
+        raise HTTPException(status_code=500, detail="DocuSign non configuré")
+    
+    auth_url = (
+        f"https://{DOCUSIGN_AUTH_SERVER}/oauth/auth"
+        f"?response_type=code"
+        f"&scope=signature"
+        f"&client_id={DOCUSIGN_INTEGRATION_KEY}"
+        f"&redirect_uri={redirect_uri}"
+    )
+    return {"auth_url": auth_url}
+
+@api_router.post("/docusign/callback")
+async def docusign_oauth_callback(request: DocuSignOAuthRequest):
+    """Exchange authorization code for access token"""
+    import requests
+    
+    token_url = f"https://{DOCUSIGN_AUTH_SERVER}/oauth/token"
+    
+    auth_string = base64.b64encode(
+        f"{DOCUSIGN_INTEGRATION_KEY}:{DOCUSIGN_SECRET_KEY}".encode()
+    ).decode()
+    
+    headers = {
+        "Authorization": f"Basic {auth_string}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    
+    data = {
+        "grant_type": "authorization_code",
+        "code": request.code,
+        "redirect_uri": request.redirect_uri
+    }
+    
+    response = requests.post(token_url, headers=headers, data=data)
+    
+    if response.status_code != 200:
+        raise HTTPException(status_code=400, detail=f"Erreur DocuSign: {response.text}")
+    
+    token_data = response.json()
+    docusign_tokens["access_token"] = token_data.get("access_token")
+    docusign_tokens["refresh_token"] = token_data.get("refresh_token")
+    docusign_tokens["expires_at"] = datetime.now(timezone.utc).timestamp() + token_data.get("expires_in", 3600)
+    
+    return {"success": True, "message": "DocuSign connecté avec succès"}
+
+@api_router.get("/docusign/status")
+async def get_docusign_status():
+    """Check if DocuSign is configured and authenticated"""
+    is_configured = bool(DOCUSIGN_INTEGRATION_KEY and DOCUSIGN_SECRET_KEY)
+    is_authenticated = bool(docusign_tokens.get("access_token"))
+    
+    if is_authenticated:
+        # Check if token is expired
+        expires_at = docusign_tokens.get("expires_at", 0)
+        if datetime.now(timezone.utc).timestamp() > expires_at:
+            is_authenticated = False
+    
+    return {
+        "configured": is_configured,
+        "authenticated": is_authenticated,
+        "account_id": DOCUSIGN_ACCOUNT_ID
+    }
+
+@api_router.post("/docusign/send-facture/{facture_id}")
+async def send_facture_for_signature(facture_id: str, signer_email: str, signer_name: str):
+    """Send a facture for electronic signature"""
+    
+    if not docusign_tokens.get("access_token"):
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié. Veuillez vous connecter d'abord.")
+    
+    # Get facture
+    facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not facture:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    # Get entreprise config
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    if not config:
+        config = {"raison_sociale": "Terre de Beauce"}
+    
+    # Generate simple HTML document for the facture
+    html_content = generate_facture_html(facture, config)
+    
+    try:
+        # Create API client
+        api_client = ApiClient()
+        api_client.host = DOCUSIGN_BASE_URL
+        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        
+        # Create envelope
+        envelope_definition = EnvelopeDefinition(
+            email_subject=f"Facture {facture['numero']} - {config.get('raison_sociale')} - Signature requise",
+            email_blurb=f"Veuillez signer la facture {facture['numero']} de {config.get('raison_sociale')}.",
+            documents=[
+                Document(
+                    document_base64=base64.b64encode(html_content.encode()).decode(),
+                    name=f"Facture_{facture['numero']}.html",
+                    file_extension="html",
+                    document_id="1"
+                )
+            ],
+            recipients=Recipients(
+                signers=[
+                    Signer(
+                        email=signer_email,
+                        name=signer_name,
+                        recipient_id="1",
+                        routing_order="1",
+                        tabs=Tabs(
+                            sign_here_tabs=[
+                                SignHere(
+                                    anchor_string="/sn1/",
+                                    anchor_units="pixels",
+                                    anchor_x_offset="20",
+                                    anchor_y_offset="10"
+                                )
+                            ]
+                        )
+                    )
+                ]
+            ),
+            status="sent"
+        )
+        
+        # Send envelope
+        envelopes_api = EnvelopesApi(api_client)
+        result = envelopes_api.create_envelope(DOCUSIGN_ACCOUNT_ID, envelope_definition=envelope_definition)
+        
+        # Update facture with envelope ID
+        await db.factures.update_one(
+            {"id": facture_id},
+            {"$set": {
+                "docusign_envelope_id": result.envelope_id,
+                "statut": "envoyee"
+            }}
+        )
+        
+        return {
+            "success": True,
+            "envelope_id": result.envelope_id,
+            "message": f"Facture envoyée à {signer_email} pour signature"
+        }
+        
+    except Exception as e:
+        logger.error(f"DocuSign error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
+
+@api_router.get("/docusign/envelope/{envelope_id}/status")
+async def get_envelope_status(envelope_id: str):
+    """Get the status of a DocuSign envelope"""
+    
+    if not docusign_tokens.get("access_token"):
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié")
+    
+    try:
+        api_client = ApiClient()
+        api_client.host = DOCUSIGN_BASE_URL
+        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        
+        envelopes_api = EnvelopesApi(api_client)
+        envelope = envelopes_api.get_envelope(DOCUSIGN_ACCOUNT_ID, envelope_id)
+        
+        return {
+            "envelope_id": envelope_id,
+            "status": envelope.status,
+            "sent_date": envelope.sent_date_time,
+            "completed_date": envelope.completed_date_time
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
+
+def generate_facture_html(facture: dict, config: dict) -> str:
+    """Generate HTML content for a facture"""
+    
+    lignes_html = ""
+    for ligne in facture.get("lignes", []):
+        lignes_html += f"""
+        <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">{ligne.get('description', '')}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">{ligne.get('quantite', 0)} {ligne.get('unite', '')}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">{ligne.get('prix_unitaire', 0):.2f} €</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">{ligne.get('montant_ht', 0):.2f} €</td>
+        </tr>
+        """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; color: #333; }}
+            .header {{ display: flex; justify-content: space-between; margin-bottom: 40px; }}
+            .company {{ }}
+            .company h1 {{ color: #1A4D2E; margin: 0; }}
+            .invoice-info {{ text-align: right; }}
+            .invoice-number {{ font-size: 24px; font-weight: bold; color: #1A4D2E; }}
+            .parties {{ display: flex; justify-content: space-between; margin-bottom: 30px; }}
+            .party {{ width: 45%; }}
+            .party-title {{ font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 5px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-bottom: 30px; }}
+            th {{ background: #1A4D2E; color: white; padding: 10px; text-align: left; }}
+            .totals {{ text-align: right; }}
+            .totals table {{ width: 300px; margin-left: auto; }}
+            .total-row td {{ padding: 8px; }}
+            .grand-total {{ font-size: 18px; font-weight: bold; background: #f5f5f5; }}
+            .signature {{ margin-top: 50px; padding: 20px; border: 1px dashed #ccc; }}
+            .signature-label {{ color: #666; margin-bottom: 10px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="company">
+                <h1>{config.get('raison_sociale', 'Terre de Beauce')}</h1>
+                <p>{config.get('adresse', '')}<br>
+                {config.get('code_postal', '')} {config.get('ville', '')}</p>
+                <p>SIRET: {config.get('siret', '')}<br>
+                TVA: {config.get('tva_intracommunautaire', '')}</p>
+            </div>
+            <div class="invoice-info">
+                <div class="invoice-number">FACTURE</div>
+                <p><strong>N° {facture.get('numero', '')}</strong></p>
+                <p>Date: {facture.get('date_emission', '')}<br>
+                Échéance: {facture.get('date_echeance', '')}</p>
+            </div>
+        </div>
+        
+        <div class="parties">
+            <div class="party">
+                <div class="party-title">Client</div>
+                <p><strong>{facture.get('client_raison_sociale', '')}</strong><br>
+                {facture.get('client_adresse', '')}<br>
+                {f"SIRET: {facture.get('client_siret', '')}" if facture.get('client_siret') else ""}</p>
+            </div>
+            <div class="party">
+                <div class="party-title">Chantier</div>
+                <p><strong>{facture.get('chantier_reference', '')}</strong><br>
+                {facture.get('chantier_lieu', '')}</p>
+            </div>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th style="text-align: right;">Quantité</th>
+                    <th style="text-align: right;">Prix unitaire</th>
+                    <th style="text-align: right;">Total HT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {lignes_html}
+            </tbody>
+        </table>
+        
+        <div class="totals">
+            <table>
+                <tr class="total-row">
+                    <td>Total HT</td>
+                    <td style="text-align: right;">{facture.get('montant_ht', 0):.2f} €</td>
+                </tr>
+                <tr class="total-row">
+                    <td>TVA ({facture.get('taux_tva', 20)}%)</td>
+                    <td style="text-align: right;">{facture.get('montant_tva', 0):.2f} €</td>
+                </tr>
+                <tr class="total-row grand-total">
+                    <td>Total TTC</td>
+                    <td style="text-align: right;">{facture.get('montant_ttc', 0):.2f} €</td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="signature">
+            <div class="signature-label">Signature du client (Bon pour accord)</div>
+            <p>/sn1/</p>
+        </div>
+        
+        <p style="margin-top: 30px; font-size: 12px; color: #666;">
+            {config.get('raison_sociale', '')} - {config.get('email', '')}
+        </p>
+    </body>
+    </html>
+    """
+    return html
+
 # Include the router in the main app
 app.include_router(api_router)
 
