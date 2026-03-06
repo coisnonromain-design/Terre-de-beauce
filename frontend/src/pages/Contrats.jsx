@@ -15,7 +15,10 @@ import {
   Building2,
   Fuel,
   Calendar,
-  Download,
+  RefreshCw,
+  Mail,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,7 +66,15 @@ const statusConfig = {
   brouillon: { label: "Brouillon", class: "bg-slate-100 text-slate-700 border-slate-200", icon: FileText },
   envoye: { label: "Envoyé", class: "bg-blue-100 text-blue-700 border-blue-200", icon: Send },
   signe: { label: "Signé", class: "bg-green-100 text-green-700 border-green-200", icon: CheckCircle },
-  annule: { label: "Annulé", class: "bg-red-100 text-red-700 border-red-200", icon: Clock },
+  annule: { label: "Annulé", class: "bg-red-100 text-red-700 border-red-200", icon: XCircle },
+};
+
+const docusignStatusConfig = {
+  sent: { label: "Envoyé", class: "bg-blue-50 text-blue-600", icon: Mail },
+  delivered: { label: "Reçu", class: "bg-indigo-50 text-indigo-600", icon: Mail },
+  completed: { label: "Signé", class: "bg-green-50 text-green-600", icon: CheckCircle },
+  declined: { label: "Refusé", class: "bg-red-50 text-red-600", icon: XCircle },
+  voided: { label: "Annulé", class: "bg-gray-50 text-gray-600", icon: XCircle },
 };
 
 export default function Contrats() {
@@ -80,6 +91,15 @@ export default function Contrats() {
   const [contratToDelete, setContratToDelete] = useState(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedChantierId, setSelectedChantierId] = useState("");
+  
+  // DocuSign states
+  const [docusignDialogOpen, setDocusignDialogOpen] = useState(false);
+  const [docusignContrat, setDocusignContrat] = useState(null);
+  const [signerEmail, setSignerEmail] = useState("");
+  const [signerName, setSignerName] = useState("");
+  const [sendingDocusign, setSendingDocusign] = useState(false);
+  const [docusignStatus, setDocusignStatus] = useState(null);
+  const [syncingStatus, setSyncingStatus] = useState(false);
 
   const [form, setForm] = useState({
     client_nom: "",
@@ -94,6 +114,7 @@ export default function Contrats() {
 
   useEffect(() => {
     fetchData();
+    checkDocuSignStatus();
   }, []);
 
   const fetchData = async () => {
@@ -108,6 +129,15 @@ export default function Contrats() {
       toast.error("Erreur lors du chargement des données");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkDocuSignStatus = async () => {
+    try {
+      const res = await axios.get(`${API}/docusign/status`);
+      setDocusignStatus(res.data);
+    } catch (error) {
+      console.error("Erreur vérification DocuSign:", error);
     }
   };
 
@@ -164,6 +194,13 @@ export default function Contrats() {
     setViewDialogOpen(true);
   };
 
+  const openDocuSignDialog = (contrat) => {
+    setDocusignContrat(contrat);
+    setSignerEmail(contrat.client_email || "");
+    setSignerName(contrat.client_interlocuteur || contrat.client_nom || "");
+    setDocusignDialogOpen(true);
+  };
+
   const handleDelete = async () => {
     if (!contratToDelete) return;
     try {
@@ -185,6 +222,55 @@ export default function Contrats() {
       fetchData();
     } catch (error) {
       toast.error("Erreur lors de la mise à jour du statut");
+    }
+  };
+
+  const handleSendDocuSign = async () => {
+    if (!docusignContrat || !signerEmail || !signerName) {
+      toast.error("Veuillez remplir tous les champs");
+      return;
+    }
+
+    setSendingDocusign(true);
+    try {
+      const res = await axios.post(
+        `${API}/docusign/send-contrat/${docusignContrat.id}?signer_email=${encodeURIComponent(signerEmail)}&signer_name=${encodeURIComponent(signerName)}`
+      );
+      toast.success(res.data.message || "Contrat envoyé pour signature");
+      setDocusignDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      const msg = error.response?.data?.detail || "Erreur lors de l'envoi DocuSign";
+      toast.error(msg);
+    } finally {
+      setSendingDocusign(false);
+    }
+  };
+
+  const syncDocuSignStatus = async (contratId) => {
+    setSyncingStatus(true);
+    try {
+      const res = await axios.post(`${API}/docusign/sync-status/contrat/${contratId}`);
+      toast.success(`Statut mis à jour: ${res.data.docusign_status}`);
+      fetchData();
+    } catch (error) {
+      toast.error("Erreur lors de la synchronisation");
+    } finally {
+      setSyncingStatus(false);
+    }
+  };
+
+  const syncAllStatuses = async () => {
+    setSyncingStatus(true);
+    try {
+      const res = await axios.post(`${API}/docusign/sync-all`);
+      const totalSynced = res.data.contrats.length + res.data.factures.length;
+      toast.success(`${totalSynced} documents synchronisés`);
+      fetchData();
+    } catch (error) {
+      toast.error("Erreur lors de la synchronisation");
+    } finally {
+      setSyncingStatus(false);
     }
   };
 
@@ -226,7 +312,8 @@ export default function Contrats() {
           </h1>
           <p className="text-muted-foreground mt-1">
             {contrats.filter((c) => c.statut === "signe").length} signés •{" "}
-            {contrats.filter((c) => c.statut === "brouillon").length} en attente
+            {contrats.filter((c) => c.statut === "envoye").length} en attente de signature •{" "}
+            {contrats.filter((c) => c.statut === "brouillon").length} brouillons
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -252,6 +339,17 @@ export default function Contrats() {
               <SelectItem value="annule">Annulés</SelectItem>
             </SelectContent>
           </Select>
+          {docusignStatus?.authenticated && (
+            <Button
+              variant="outline"
+              onClick={syncAllStatuses}
+              disabled={syncingStatus}
+              data-testid="sync-all-btn"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncingStatus ? 'animate-spin' : ''}`} />
+              Sync DocuSign
+            </Button>
+          )}
           <Button
             onClick={() => setCreateDialogOpen(true)}
             className="bg-[#1A4D2E] hover:bg-[#143d24]"
@@ -264,13 +362,26 @@ export default function Contrats() {
         </div>
       </div>
 
+      {/* DocuSign Status Alert */}
+      {docusignStatus && !docusignStatus.authenticated && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 flex items-center justify-between">
+            <p className="text-amber-800">
+              <strong>DocuSign non connecté :</strong> Connectez-vous à DocuSign dans la page Configuration pour envoyer des contrats pour signature.
+            </p>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/configuration">Configuration</a>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Info card if no chantiers available */}
       {chantiersWithoutContract.length === 0 && contrats.length === 0 && (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="p-4">
             <p className="text-amber-800">
               <strong>Info :</strong> Créez d'abord un chantier pour pouvoir générer un contrat CCPA.
-              Chaque contrat est automatiquement lié à un chantier.
             </p>
           </CardContent>
         </Card>
@@ -298,15 +409,17 @@ export default function Contrats() {
                   <TableHead>Chantier</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Tarif</TableHead>
-                  <TableHead>Gasoil</TableHead>
-                  <TableHead>Date</TableHead>
                   <TableHead>Statut</TableHead>
-                  <TableHead className="w-28">Actions</TableHead>
+                  <TableHead>Signature DocuSign</TableHead>
+                  <TableHead className="w-32">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredContrats.map((contrat) => {
                   const StatusIcon = statusConfig[contrat.statut]?.icon || FileText;
+                  const docuStatus = contrat.docusign_status ? docusignStatusConfig[contrat.docusign_status] : null;
+                  const DocuIcon = docuStatus?.icon || Clock;
+                  
                   return (
                     <TableRow key={contrat.id} data-testid={`contrat-row-${contrat.id}`}>
                       <TableCell>
@@ -320,37 +433,61 @@ export default function Contrats() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                          {contrat.client_nom || "-"}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                            {contrat.client_nom || "-"}
+                          </div>
+                          {contrat.client_email && (
+                            <span className="text-xs text-muted-foreground">{contrat.client_email}</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
                         {contrat.prix_unitaire > 0 ? (
-                          <span className="font-medium text-[#1A4D2E]">
-                            {contrat.prix_unitaire}€/{contrat.unite_facturation?.split(" ")[0] || "unité"}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-[#1A4D2E]">
+                              {contrat.prix_unitaire}€/{contrat.unite_facturation?.split(" ")[0] || "unité"}
+                            </span>
+                            <span className={`text-xs flex items-center gap-1 ${contrat.gasoil_fourni ? 'text-green-600' : 'text-orange-600'}`}>
+                              <Fuel className="w-3 h-3" />
+                              {contrat.gasoil_fourni ? "Gasoil fourni" : "Sans gasoil"}
+                            </span>
+                          </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <span className={`text-xs flex items-center gap-1 ${contrat.gasoil_fourni ? 'text-green-600' : 'text-orange-600'}`}>
-                          <Fuel className="w-3 h-3" />
-                          {contrat.gasoil_fourni ? "Fourni" : "Non fourni"}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-sm">
-                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                          {contrat.date_creation ? new Date(contrat.date_creation).toLocaleDateString("fr-FR") : "-"}
-                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge className={`${statusConfig[contrat.statut]?.class} border`}>
                           <StatusIcon className="w-3 h-3 mr-1" />
                           {statusConfig[contrat.statut]?.label}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {contrat.docusign_envelope_id ? (
+                          <div className="flex flex-col gap-1">
+                            <Badge className={`${docuStatus?.class || 'bg-gray-50 text-gray-600'} text-xs`}>
+                              <DocuIcon className="w-3 h-3 mr-1" />
+                              {docuStatus?.label || contrat.docusign_status}
+                            </Badge>
+                            {contrat.docusign_signer_email && (
+                              <span className="text-xs text-muted-foreground">{contrat.docusign_signer_email}</span>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => syncDocuSignStatus(contrat.id)}
+                              disabled={syncingStatus}
+                            >
+                              <RefreshCw className={`w-3 h-3 mr-1 ${syncingStatus ? 'animate-spin' : ''}`} />
+                              Actualiser
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Non envoyé</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -370,6 +507,17 @@ export default function Contrats() {
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
+                          {contrat.statut === "brouillon" && docusignStatus?.authenticated && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openDocuSignDialog(contrat)}
+                              className="text-blue-600 hover:text-blue-700"
+                              data-testid={`send-docusign-${contrat.id}`}
+                            >
+                              <Send className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -419,11 +567,6 @@ export default function Contrats() {
                   ))}
                 </SelectContent>
               </Select>
-              {chantiersWithoutContract.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">
-                  Tous les chantiers ont déjà un contrat associé.
-                </p>
-              )}
             </div>
           </div>
           <DialogFooter>
@@ -437,6 +580,66 @@ export default function Contrats() {
               data-testid="confirm-create-contrat-btn"
             >
               Créer le contrat
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DocuSign Send Dialog */}
+      <Dialog open={docusignDialogOpen} onOpenChange={setDocusignDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-['Barlow_Condensed'] text-2xl flex items-center gap-2">
+              <Send className="w-5 h-5 text-blue-600" />
+              Envoyer pour signature
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Le contrat <strong>{docusignContrat?.numero_contrat}</strong> sera envoyé par DocuSign 
+              pour signature électronique.
+            </p>
+            <div>
+              <Label>Email du signataire *</Label>
+              <Input
+                type="email"
+                value={signerEmail}
+                onChange={(e) => setSignerEmail(e.target.value)}
+                placeholder="client@email.fr"
+                data-testid="docusign-signer-email"
+              />
+            </div>
+            <div>
+              <Label>Nom du signataire *</Label>
+              <Input
+                value={signerName}
+                onChange={(e) => setSignerName(e.target.value)}
+                placeholder="Nom complet"
+                data-testid="docusign-signer-name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDocusignDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleSendDocuSign}
+              disabled={sendingDocusign || !signerEmail || !signerName}
+              className="bg-blue-600 hover:bg-blue-700"
+              data-testid="confirm-send-docusign-btn"
+            >
+              {sendingDocusign ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Envoi en cours...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Envoyer
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -606,6 +809,36 @@ export default function Contrats() {
                   </p>
                 </div>
 
+                {/* DocuSign Status */}
+                {viewingContrat.docusign_envelope_id && (
+                  <div className={`p-3 rounded-lg flex items-center justify-between ${
+                    viewingContrat.docusign_status === 'completed' ? 'bg-green-50 border border-green-200' :
+                    viewingContrat.docusign_status === 'declined' ? 'bg-red-50 border border-red-200' :
+                    'bg-blue-50 border border-blue-200'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        DocuSign: {docusignStatusConfig[viewingContrat.docusign_status]?.label || viewingContrat.docusign_status}
+                      </span>
+                      {viewingContrat.docusign_signer_email && (
+                        <span className="text-sm text-muted-foreground">
+                          ({viewingContrat.docusign_signer_email})
+                        </span>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => syncDocuSignStatus(viewingContrat.id)}
+                      disabled={syncingStatus}
+                    >
+                      <RefreshCw className={`w-4 h-4 mr-1 ${syncingStatus ? 'animate-spin' : ''}`} />
+                      Actualiser
+                    </Button>
+                  </div>
+                )}
+
                 {/* Info entreprise et client */}
                 <div className="grid grid-cols-2 gap-6">
                   <div className="bg-[#1A4D2E]/5 p-4 rounded-lg">
@@ -688,7 +921,19 @@ export default function Contrats() {
 
                 {/* Actions rapides */}
                 <div className="flex gap-2 border-t pt-4">
-                  {viewingContrat.statut === "brouillon" && (
+                  {viewingContrat.statut === "brouillon" && !viewingContrat.docusign_envelope_id && docusignStatus?.authenticated && (
+                    <Button
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => {
+                        setViewDialogOpen(false);
+                        openDocuSignDialog(viewingContrat);
+                      }}
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Envoyer pour signature
+                    </Button>
+                  )}
+                  {viewingContrat.statut === "brouillon" && !docusignStatus?.authenticated && (
                     <Button
                       variant="outline"
                       onClick={() => {
