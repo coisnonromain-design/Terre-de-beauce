@@ -1,0 +1,72 @@
+{
+  "summary": "Completed testing of DocuSign integration for Contrats CCPA and Factures. Backend API tests: 10/10 passed (100%). Frontend UI tests: All DocuSign-related UI elements working correctly when DocuSign is not authenticated. Found 1 backend bug in create_contrat_ccpa endpoint.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/contrats-ccpa",
+        "issue": "500 Internal Server Error when creating contrat for client with null contact_nom, email, or telephone fields. Pydantic validation fails because client.get('field', '') returns None instead of empty string when field is null in database.",
+        "priority": "HIGH",
+        "root_cause": "In create_contrat_ccpa function (line 1373-1376), client.get('contact_nom', '') returns None when field is null, not empty string. Should use 'client.get('contact_nom') or \"\"' pattern.",
+        "affected_lines": "server.py lines 1373-1376"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: GET /api/docusign/status returns configured=true, authenticated=false",
+    "Backend: POST /api/docusign/send-contrat/{id} returns 401 when not authenticated",
+    "Backend: POST /api/docusign/sync-status/contrat/{id} returns 401 when not authenticated",
+    "Backend: POST /api/docusign/sync-status/facture/{id} returns 401 when not authenticated",
+    "Backend: POST /api/docusign/sync-status/invalid/{id} returns 400 for invalid document type",
+    "Backend: POST /api/docusign/sync-all returns 401 when not authenticated",
+    "Backend: GET /api/docusign/auth-url returns valid DocuSign OAuth URL",
+    "Backend: GET /api/docusign/envelope/{id}/status returns 401 when not authenticated",
+    "Backend: POST /api/docusign/send-facture/{id} returns 401 when not authenticated",
+    "Frontend Contrats: 'DocuSign non connecté' alert displayed when not authenticated",
+    "Frontend Contrats: 'Signature DocuSign' column header present in table",
+    "Frontend Contrats: 'Non envoyé' status shown for contrats without envelope_id",
+    "Frontend Contrats: 'Sync DocuSign' button NOT visible when not authenticated",
+    "Frontend Contrats: 'Envoyer pour signature' button NOT visible in Actions when not authenticated",
+    "Frontend Contrats: 'Marquer comme envoyé' fallback button visible in view dialog",
+    "Frontend Factures: 'Signature électronique DocuSign' alert displayed",
+    "Frontend Factures: 'Connecter DocuSign' button visible when not authenticated",
+    "Frontend Factures: 'Sync DocuSign' button NOT visible when not authenticated"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_docusign.py",
+    "/app/test_reports/pytest/pytest_docusign.xml"
+  ],
+  "action_items": [
+    "FIX CRITICAL: In server.py create_contrat_ccpa function (lines 1373-1376), change client.get('field', '') to (client.get('field') or '') to handle null values from database"
+  ],
+  "critical_code_review_comments": [
+    "Bug: client.get('contact_nom', '') returns None when field is null in MongoDB, not empty string. Use 'client.get('contact_nom') or \"\"' pattern instead."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_docusign.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 DocuSign API tests passed)",
+    "frontend": "100% (All DocuSign UI elements working correctly)"
+  },
+  "seed_data_creation": "Used existing contrats CCPA for testing. No new seed data created.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "DocuSign integration is configured but not authenticated (demo mode). All endpoints correctly return 401 when not authenticated. Frontend correctly shows 'DocuSign non connecté' alerts and hides send buttons when not authenticated. The create_contrat_ccpa endpoint has a bug with null client fields that needs fixing.",
+  "rca_of_the_issue": {
+    "issue": "POST /api/contrats-ccpa returns 500 Internal Server Error",
+    "root_cause": "Pydantic validation error - client fields (contact_nom, email, telephone) can be null in MongoDB but the ContratCCPA model expects strings. The dict.get('key', default) method returns None when the key exists but has a null value, not the default.",
+    "reproduction_steps": [
+      "1. Create a client without contact_nom, email, or telephone fields",
+      "2. Create a chantier linked to that client",
+      "3. Try to create a contrat CCPA for that chantier",
+      "4. Observe 500 error with Pydantic validation error"
+    ],
+    "fix": "Change lines 1373-1376 in server.py from 'client.get('field', '')' to '(client.get('field') or '')'"
+  }
+}
