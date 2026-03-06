@@ -244,6 +244,7 @@ export default function Chantiers() {
       affectations: chantier.affectations || [],
       tarifs: chantier.tarifs || [],
       transport_type: chantier.transport_type || "solide",
+      avec_gasoil: chantier.avec_gasoil !== undefined ? chantier.avec_gasoil : true,
       notes: chantier.notes || "",
     });
     setDialogOpen(true);
