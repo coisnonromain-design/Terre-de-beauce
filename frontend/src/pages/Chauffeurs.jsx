@@ -12,6 +12,8 @@ import {
   IdCard,
   Check,
   X,
+  Key,
+  Copy,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -258,6 +260,26 @@ export default function Chauffeurs() {
                       {chauffeur.date_embauche
                         ? new Date(chauffeur.date_embauche).toLocaleDateString("fr-FR")
                         : "-"}
+                    </TableCell>
+                    <TableCell>
+                      {chauffeur.code_acces && (
+                        <div className="flex items-center gap-1">
+                          <code className="bg-muted px-2 py-1 rounded text-xs font-mono">
+                            {chauffeur.code_acces}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => {
+                              navigator.clipboard.writeText(chauffeur.code_acces);
+                              toast.success("Code copié !");
+                            }}
+                          >
+                            <Copy className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge
