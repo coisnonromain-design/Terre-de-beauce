@@ -174,7 +174,7 @@ export default function Configuration() {
     solide_sans_gasoil: {
       label: "Solide sans Gasoil",
       icon: <TruckIcon className="w-4 h-4" />,
-      iconFuel: <FuelOff className="w-4 h-4 text-orange-500" />,
+      iconFuel: <CircleOff className="w-4 h-4 text-orange-500" />,
       description: "Transport de matières solides sans gasoil fourni",
       unite: "tonne",
     },
@@ -188,7 +188,7 @@ export default function Configuration() {
     liquide_sans_gasoil: {
       label: "Liquide sans Gasoil",
       icon: <Droplets className="w-4 h-4" />,
-      iconFuel: <FuelOff className="w-4 h-4 text-orange-500" />,
+      iconFuel: <CircleOff className="w-4 h-4 text-orange-500" />,
       description: "Transport de liquides sans gasoil fourni",
       unite: "m³",
     },
