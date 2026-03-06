@@ -40,14 +40,13 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - ✅ Gestion Chantiers avec affectations
 - ✅ Planning - Vue calendrier mensuelle
 
-### Phase 2 (Facturation) - Janvier 2026
-- ✅ Tarification client (€/h, €/tonne, €/jour)
-- ✅ Tarification par chantier
-- ✅ Portail Chauffeur (/chauffeur) - Saisie heures et volumes
-- ✅ Page Pointages - Vue consolidée avec filtres
-- ✅ Génération automatique de factures depuis pointages
-- ✅ Configuration entreprise
-- ⏳ Signature électronique DocuSign (en attente des clés API)
+### Phase 3 (DocuSign) - Janvier 2026
+- ✅ Configuration DocuSign avec clés API
+- ✅ Endpoint de statut DocuSign
+- ✅ Génération URL d'authentification OAuth
+- ✅ Interface de connexion DocuSign sur page Factures
+- ✅ Envoi de factures en signature électronique (après auth OAuth)
+- ⏳ Contrats de transport (en attente du modèle)
 
 ## API Endpoints
 - `GET/POST /api/tracteurs` - Gestion tracteurs
@@ -73,9 +72,10 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [x] Portail chauffeur (saisie heures/volumes)
 - [x] Génération factures automatique
 
-### P1 (Important) - À FAIRE
-- [ ] Signature électronique DocuSign (clés API requises)
-- [ ] Contrats de transport (modèle fourni par client)
+### P1 (Important) - EN COURS
+- [x] Configuration DocuSign (clés API fournies)
+- [x] Intégration signature électronique factures
+- [ ] Contrats de transport (modèle à fournir par client)
 - [ ] Export PDF des factures
 - [ ] Authentification utilisateurs admin
 
