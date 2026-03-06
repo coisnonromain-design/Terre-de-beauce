@@ -221,6 +221,32 @@ export default function Factures() {
 
   return (
     <div className="space-y-6" data-testid="factures-page">
+      {/* DocuSign Status Banner */}
+      {docusignStatus && !docusignStatus.authenticated && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600" />
+              <div>
+                <p className="font-medium text-amber-800">Signature électronique DocuSign</p>
+                <p className="text-sm text-amber-700">
+                  Connectez-vous pour envoyer des factures en signature électronique
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={handleDocusignAuth}
+              variant="outline"
+              className="border-amber-400 text-amber-700 hover:bg-amber-100"
+              data-testid="docusign-connect-btn"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Connecter DocuSign
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
