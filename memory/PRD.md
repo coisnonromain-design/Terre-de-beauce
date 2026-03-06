@@ -112,5 +112,5 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 
 ## Next Tasks
 1. **Logique de facturation complexe** - Implémenter le calcul avec barèmes kilométriques et règle du minima horaire
-2. **Refonte portail chauffeur** - Permettre la saisie des tours (volume + distance) par jour
-3. **Modèle de contrat** - Attendre le modèle de contrat de transport du client
+2. **Lien contrat-facture** - Relier automatiquement le numéro de contrat au numéro de facture lors de la génération
+3. **Refonte portail chauffeur** - Permettre la saisie des tours (volume + distance) par jour
