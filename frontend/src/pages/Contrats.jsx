@@ -931,7 +931,29 @@ export default function Contrats() {
                 </div>
 
                 {/* Actions rapides */}
-                <div className="flex gap-2 border-t pt-4">
+                <div className="flex gap-2 border-t pt-4 flex-wrap">
+                  <Button
+                    variant="outline"
+                    className="text-red-600 border-red-200 hover:bg-red-50"
+                    onClick={() => window.open(`${API}/contrats-ccpa/${viewingContrat.id}/pdf`, '_blank')}
+                    data-testid="view-pdf-dialog-btn"
+                  >
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Voir le PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = `${API}/contrats-ccpa/${viewingContrat.id}/download`;
+                      link.download = `Contrat_${viewingContrat.numero_contrat}.pdf`;
+                      link.click();
+                    }}
+                    data-testid="download-pdf-btn"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Télécharger
+                  </Button>
                   {viewingContrat.statut === "brouillon" && !viewingContrat.docusign_envelope_id && docusignStatus?.authenticated && (
                     <Button
                       className="bg-blue-600 hover:bg-blue-700"
