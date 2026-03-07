@@ -97,6 +97,34 @@ export default function Pointages() {
             Suivi des heures et volumes transportés
           </p>
         </div>
+        <div className="flex items-center gap-1 border rounded-md">
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="h-9 px-3"
+            title="Exporter en CSV"
+            data-testid="export-pointages-csv-btn"
+          >
+            <a href={`${API}/export/pointages?format=csv${chantierFilter !== 'all' ? `&chantier_id=${chantierFilter}` : ''}${chauffeurFilter !== 'all' ? `&chauffeur_id=${chauffeurFilter}` : ''}`} download>
+              <Download className="w-4 h-4 mr-1" />
+              CSV
+            </a>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="h-9 px-3 border-l"
+            title="Exporter en Excel"
+            data-testid="export-pointages-excel-btn"
+          >
+            <a href={`${API}/export/pointages?format=excel${chantierFilter !== 'all' ? `&chantier_id=${chantierFilter}` : ''}${chauffeurFilter !== 'all' ? `&chauffeur_id=${chauffeurFilter}` : ''}`} download>
+              <FileDown className="w-4 h-4 mr-1" />
+              Excel
+            </a>
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
