@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
 import {
@@ -16,6 +17,7 @@ import {
   Trash2,
   Route,
   Fuel,
+  ArrowLeft,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,10 +37,10 @@ import { Separator } from "@/components/ui/separator";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function ChauffeurPortal() {
+  const navigate = useNavigate();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [chauffeur, setChauffeur] = useState(null);
-  const [codeAcces, setCodeAcces] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [chantiers, setChantiers] = useState([]);
   const [pointages, setPointages] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -54,45 +56,24 @@ export default function ChauffeurPortal() {
   const [tours, setTours] = useState([]);
 
   useEffect(() => {
-    // Check if already logged in
+    // Vérifier si connecté
     const savedChauffeur = localStorage.getItem("chauffeur_session");
-    if (savedChauffeur) {
-      const session = JSON.parse(savedChauffeur);
-      setChauffeur(session);
-      setIsLoggedIn(true);
-      fetchChauffeurData(session.chauffeur_id);
-    }
-  }, []);
-
-  const handleLogin = async () => {
-    if (!codeAcces.trim()) {
-      toast.error("Veuillez entrer votre code d'accès");
+    if (!savedChauffeur) {
+      navigate("/chauffeur/login");
       return;
     }
-
-    setLoading(true);
-    try {
-      const res = await axios.post(`${API}/chauffeur/login`, { code_acces: codeAcces });
-      const session = res.data;
-      localStorage.setItem("chauffeur_session", JSON.stringify(session));
-      setChauffeur(session);
-      setIsLoggedIn(true);
-      fetchChauffeurData(session.chauffeur_id);
-      toast.success(`Bienvenue ${session.chauffeur_nom}`);
-    } catch (error) {
-      toast.error("Code d'accès invalide");
-    } finally {
-      setLoading(false);
-    }
-  };
+    
+    const session = JSON.parse(savedChauffeur);
+    setChauffeur(session);
+    setIsLoggedIn(true);
+    fetchChauffeurData(session.chauffeur_id);
+    setLoading(false);
+  }, [navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem("chauffeur_session");
-    setChauffeur(null);
-    setIsLoggedIn(false);
-    setChantiers([]);
-    setPointages([]);
-    setCodeAcces("");
+    toast.success("Déconnexion réussie");
+    navigate("/");
   };
 
   const fetchChauffeurData = async (chauffeurId) => {
