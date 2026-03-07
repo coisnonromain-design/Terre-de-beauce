@@ -346,6 +346,41 @@ class LigneFacture(BaseModel):
     prix_unitaire: float
     montant_ht: float
 
+# Photo attachée à un pointage
+class PhotoPointage(BaseModel):
+    id: str
+    url: str
+    type: str = "pointage"  # "pointage" ou "note_frais"
+    description: Optional[str] = None
+    date_creation: str
+
+# Note de frais
+class NoteFrais(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    chauffeur_id: str
+    chauffeur_nom: Optional[str] = None
+    pointage_id: Optional[str] = None
+    chantier_id: Optional[str] = None
+    chantier_reference: Optional[str] = None
+    date: str
+    montant: float
+    type_frais: str  # "carburant", "peage", "repas", "hebergement", "autre"
+    description: Optional[str] = None
+    photo_url: Optional[str] = None
+    statut: str = "en_attente"  # "en_attente", "valide", "refuse", "rembourse"
+    date_creation: str
+
+class NoteFraisCreate(BaseModel):
+    chauffeur_id: str
+    pointage_id: Optional[str] = None
+    chantier_id: Optional[str] = None
+    date: str
+    montant: float
+    type_frais: str
+    description: Optional[str] = None
+    photo_base64: Optional[str] = None
+
 # Facture
 class FactureBase(BaseModel):
     chantier_id: str
