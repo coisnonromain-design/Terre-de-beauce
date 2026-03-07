@@ -1476,6 +1476,7 @@ def generate_facture_html(facture: dict, config: dict) -> str:
         <div class="chantier">
             <div class="chantier-title">Référence chantier</div>
             <strong>{facture.get('chantier_reference', '')}</strong>
+            {f"<span style='margin-left: 20px; color: #666;'>Contrat N° {facture.get('contrat_numero')}</span>" if facture.get('contrat_numero') else ""}
         </div>
         
         <table>
