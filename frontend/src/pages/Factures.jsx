@@ -340,6 +340,34 @@ export default function Factures() {
               Sync DocuSign
             </Button>
           )}
+          <div className="flex items-center gap-1 border rounded-md">
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="h-9 px-3"
+              title="Exporter en CSV"
+              data-testid="export-csv-btn"
+            >
+              <a href={`${API}/export/factures?format=csv${statusFilter !== 'all' ? `&statut=${statusFilter}` : ''}`} download>
+                <Download className="w-4 h-4 mr-1" />
+                CSV
+              </a>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="h-9 px-3 border-l"
+              title="Exporter en Excel"
+              data-testid="export-excel-btn"
+            >
+              <a href={`${API}/export/factures?format=excel${statusFilter !== 'all' ? `&statut=${statusFilter}` : ''}`} download>
+                <FileDown className="w-4 h-4 mr-1" />
+                Excel
+              </a>
+            </Button>
+          </div>
           <Button
             onClick={() => setDialogOpen(true)}
             className="bg-[#1A4D2E] hover:bg-[#143d24]"
