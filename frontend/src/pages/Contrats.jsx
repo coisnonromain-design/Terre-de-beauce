@@ -504,6 +504,15 @@ export default function Contrats() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => window.open(`${API}/contrats-ccpa/${contrat.id}/pdf`, '_blank')}
+                            title="Voir le PDF"
+                            data-testid={`view-pdf-${contrat.id}`}
+                          >
+                            <FileDown className="w-4 h-4 text-red-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => openEditDialog(contrat)}
                             data-testid={`edit-contrat-${contrat.id}`}
                           >
