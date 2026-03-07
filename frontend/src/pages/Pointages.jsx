@@ -249,6 +249,7 @@ export default function Pointages() {
                   <TableHead className="text-right">Heures</TableHead>
                   <TableHead className="text-right">Tonnage</TableHead>
                   <TableHead className="text-right">Rotations</TableHead>
+                  <TableHead className="text-center">PDF</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -285,6 +286,20 @@ export default function Pointages() {
                     </TableCell>
                     <TableCell className="text-right">
                       {pointage.nombre_rotations}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                        className="h-8 w-8 p-0"
+                        title="Télécharger le PDF"
+                        data-testid={`pdf-pointage-${pointage.id}`}
+                      >
+                        <a href={`${API}/pointages/${pointage.id}/pdf`} download>
+                          <FileText className="w-4 h-4 text-[#1A4D2E]" />
+                        </a>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
