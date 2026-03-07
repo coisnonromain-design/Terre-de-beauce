@@ -498,19 +498,19 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-[#1A4D2E]"></div>
                 <span className="text-muted-foreground">Contrats signés:</span>
-                <span className="font-bold">{dashboardStats?.contrats_signes || 0}</span>
+                <span className="font-bold">{contratsSigns}</span>
               </div>
               <Separator orientation="vertical" className="h-4" />
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-amber-500"></div>
                 <span className="text-muted-foreground">En attente:</span>
-                <span className="font-bold">{dashboardStats?.contrats_en_attente || 0}</span>
+                <span className="font-bold">{contratsEnAttente}</span>
               </div>
               <Separator orientation="vertical" className="h-4" />
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-blue-500"></div>
                 <span className="text-muted-foreground">Volume ce mois:</span>
-                <span className="font-bold">{(dashboardStats?.volume_mois || 0).toFixed(1)} m³</span>
+                <span className="font-bold">{volumeMois.toFixed(1)} m³</span>
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
