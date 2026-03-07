@@ -143,6 +143,32 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 2. **Géolocalisation des tracteurs** - Intégrer un système de suivi GPS pour optimiser les rotations
 
 ## Technical Notes
-- Le fichier `server.py` est volumineux (>2900 lignes). Un refactoring en plusieurs routers FastAPI est recommandé pour améliorer la maintenabilité.
+
+### Architecture Refactoring (Mars 2026)
+Une nouvelle architecture modulaire a été mise en place pour améliorer la maintenabilité :
+
+```
+/app/backend/
+├── server.py              # Production (monolithique ~3000 lignes)
+├── main.py               # Point d'entrée modulaire (nouveau)
+├── core/
+│   └── database.py       # Connexion MongoDB et config
+├── models/
+│   └── schemas.py        # Modèles Pydantic et enums
+└── routers/
+    ├── tracteurs.py      # Gestion flotte - Tracteurs
+    ├── equipements.py    # Gestion flotte - Équipements
+    ├── chauffeurs.py     # Gestion chauffeurs
+    ├── clients.py        # Gestion clients
+    ├── chantiers.py      # Gestion chantiers
+    ├── pointages.py      # Pointages
+    ├── config.py         # Configuration (entreprise + barèmes)
+    ├── export.py         # Export CSV/Excel
+    └── dashboard.py      # Dashboard & Statistiques
+```
+
+**Note** : Le fichier `server.py` reste en production pour la stabilité. Les routers modulaires sont prêts pour une migration progressive. Les modules complexes (factures, contrats, docusign) nécessitent des tests supplémentaires avant migration.
+
+### Autres Notes Techniques
 - Les exports utilisent `openpyxl` pour Excel et génèrent des CSV avec séparateur point-virgule (`;`) pour compatibilité Excel français.
 - Le dashboard utilise `recharts` pour les graphiques d'évolution du CA.
