@@ -2520,9 +2520,6 @@ async def sync_all_docusign_statuses():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
 
-# Include the router in the main app
-app.include_router(api_router, prefix="/api")
-
 # ============= EXPORT ROUTES =============
 @api_router.get("/export/factures")
 async def export_factures(format: str = Query("csv", enum=["csv", "excel"]), statut: Optional[str] = None):
