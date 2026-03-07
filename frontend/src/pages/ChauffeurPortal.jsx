@@ -170,49 +170,11 @@ export default function ChauffeurPortal() {
     }
   };
 
-  // Login Screen
-  if (!isLoggedIn) {
+  // Login Screen - Redirect to login page
+  if (!isLoggedIn || loading) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center pb-2">
-            <div className="w-16 h-16 rounded-xl bg-[#D9A520] flex items-center justify-center mx-auto mb-4">
-              <Truck className="w-10 h-10 text-[#1A1D1F]" />
-            </div>
-            <CardTitle className="text-3xl font-['Barlow_Condensed'] tracking-tight">
-              TERRE DE BEAUCE
-            </CardTitle>
-            <p className="text-muted-foreground">Portail Chauffeur</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="code">Code d'accès</Label>
-              <Input
-                id="code"
-                type="text"
-                value={codeAcces}
-                onChange={(e) => setCodeAcces(e.target.value.toUpperCase())}
-                placeholder="Entrez votre code"
-                className="text-center text-2xl font-mono tracking-widest"
-                maxLength={6}
-                data-testid="code-acces-input"
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-              />
-              <p className="text-xs text-muted-foreground mt-1 text-center">
-                Code fourni par votre responsable
-              </p>
-            </div>
-            <Button
-              onClick={handleLogin}
-              disabled={loading}
-              className="w-full bg-[#1A4D2E] hover:bg-[#143d24]"
-              data-testid="login-btn"
-            >
-              <LogIn className="w-4 h-4 mr-2" />
-              {loading ? "Connexion..." : "Se connecter"}
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1A4D2E]"></div>
       </div>
     );
   }
