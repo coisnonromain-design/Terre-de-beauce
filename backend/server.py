@@ -1344,6 +1344,9 @@ async def create_note_frais(note: NoteFraisCreate):
     }
     
     await db.notes_frais.insert_one(note_dict)
+    # Remove MongoDB _id before returning
+    if '_id' in note_dict:
+        del note_dict['_id']
     return note_dict
 
 @api_router.put("/notes-frais/{note_id}/statut")
