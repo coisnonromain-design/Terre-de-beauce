@@ -24,6 +24,7 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 // Composant pour afficher et éditer un barème
 function BaremeEditor({ bareme, onChange, unite }) {
   const handlePriceChange = (index, value) => {
+    if (!bareme?.tranches) return;
     const newTranches = [...bareme.tranches];
     newTranches[index] = {
       ...newTranches[index],
@@ -31,6 +32,15 @@ function BaremeEditor({ bareme, onChange, unite }) {
     };
     onChange({ ...bareme, tranches: newTranches });
   };
+
+  // Vérification si bareme ou tranches n'existe pas
+  if (!bareme?.tranches || bareme.tranches.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Aucun barème configuré
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
