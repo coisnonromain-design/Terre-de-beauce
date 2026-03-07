@@ -404,7 +404,8 @@ class TestCleanup:
         response = requests.get(f"{BASE_URL}/api/factures")
         if response.status_code == 200:
             for f in response.json():
-                if f.get("notes", "").startswith("TEST_"):
+                notes = f.get("notes") or ""
+                if notes.startswith("TEST_"):
                     requests.delete(f"{BASE_URL}/api/factures/{f['id']}")
                     print(f"Deleted test facture: {f['id']}")
         
