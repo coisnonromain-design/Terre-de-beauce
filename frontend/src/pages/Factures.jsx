@@ -480,6 +480,16 @@ export default function Factures() {
                       {facture.montant_ttc?.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
                     </TableCell>
                     <TableCell>
+                      {facture.compte_bancaire_nom ? (
+                        <div className="flex items-center gap-1.5 text-sm">
+                          <Landmark className="w-3.5 h-3.5 text-muted-foreground" />
+                          {facture.compte_bancaire_nom}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Badge className={`${statusConfig[facture.statut]?.class} border`}>
                         <StatusIcon className="w-3 h-3 mr-1" />
                         {statusConfig[facture.statut]?.label}
