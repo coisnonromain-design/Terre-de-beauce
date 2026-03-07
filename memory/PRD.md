@@ -163,15 +163,15 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [x] Tableau de bord avancé avec graphiques et KPIs
 
 ### P2 (Souhaitable) - À FAIRE
-- [ ] **Génération PDF pour les Pointages** - Fiche de pointage téléchargeable
 - [ ] Historique des modifications
-- [ ] Application mobile chauffeur
 - [ ] **Géolocalisation des tracteurs** - Suivi GPS et historique des trajets
 - [ ] Intégration comptable (export pour logiciels comptables)
+- [ ] **Modification mot de passe chauffeur** - Permettre aux chauffeurs de changer leur code d'accès
 
 ## Next Tasks
-1. **Génération PDF pour les Pointages** - Permettre aux chauffeurs de télécharger leurs fiches de pointage en PDF
+1. **Configurer DocuSign pour la production** - Remplacer les clés sandbox par les clés de production
 2. **Géolocalisation des tracteurs** - Intégrer un système de suivi GPS pour optimiser les rotations
+3. **Refactorisation backend** - Migrer le fichier monolithique `server.py` vers l'architecture modulaire préparée
 
 ## Technical Notes
 
