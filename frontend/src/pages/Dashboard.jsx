@@ -186,14 +186,26 @@ export default function Dashboard() {
     );
   };
 
-  // Prepare chart data
-  const caEvolution = dashboardStats?.ca_evolution || [];
+  // Prepare chart data - map nested API response to expected format
+  const caEvolution = dashboardStats?.evolution_ca || [];
   const facturesParStatut = [
-    { name: 'En attente', value: dashboardStats?.factures_en_attente || 0, color: '#D9A520' },
-    { name: 'Payées', value: dashboardStats?.factures_payees || 0, color: '#1A4D2E' },
+    { name: 'En attente', value: dashboardStats?.facturation?.factures_en_attente || 0, color: '#D9A520' },
+    { name: 'Payées', value: dashboardStats?.facturation?.factures_payees || 0, color: '#1A4D2E' },
   ];
   
   const topClients = dashboardStats?.top_clients || [];
+  
+  // Extract nested values for easier access
+  const caMois = dashboardStats?.facturation?.ca_mois || 0;
+  const caAnnee = dashboardStats?.facturation?.ca_annee || 0;
+  const facturesEnAttente = dashboardStats?.facturation?.factures_en_attente || 0;
+  const heuresMois = dashboardStats?.activite_mois?.heures || 0;
+  const toursMois = dashboardStats?.activite_mois?.tours || 0;
+  const volumeMois = dashboardStats?.activite_mois?.volume || 0;
+  const chantiersActifs = dashboardStats?.chantiers?.actifs || 0;
+  const chantiersTermines = dashboardStats?.chantiers?.termines || 0;
+  const contratsSigns = dashboardStats?.contrats?.signes || 0;
+  const contratsEnAttente = dashboardStats?.contrats?.en_attente || 0;
 
   return (
     <div className="space-y-6" data-testid="dashboard-page">
