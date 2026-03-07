@@ -702,7 +702,28 @@ export default function Factures() {
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-2 pt-4 border-t">
+              <div className="flex justify-end gap-2 pt-4 border-t flex-wrap">
+                <Button
+                  variant="outline"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  asChild
+                  data-testid="view-pdf-facture-dialog-btn"
+                >
+                  <a href={`${API}/factures/${viewingFacture.id}/pdf`} target="_blank" rel="noopener noreferrer">
+                    <FileDown className="w-4 h-4 mr-2" />
+                    Voir le PDF
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  asChild
+                  data-testid="download-pdf-facture-btn"
+                >
+                  <a href={`${API}/factures/${viewingFacture.id}/download`} download={`Facture_${viewingFacture.numero}.pdf`}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Télécharger
+                  </a>
+                </Button>
                 {viewingFacture.statut === "brouillon" && (
                   <Button
                     onClick={() => handleUpdateStatut(viewingFacture.id, "emise")}
