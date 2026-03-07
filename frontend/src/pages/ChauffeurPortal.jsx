@@ -162,7 +162,7 @@ export default function ChauffeurPortal() {
         heures_travaillees: parseFloat(form.heures_travaillees) || 0,
         tours: toursValides.map(t => ({
           volume: parseFloat(t.volume) || 0,
-          distance: parseFloat(t.distance) || 0,
+          distance_km: parseFloat(t.distance) || 0,
         })),
         commentaire: form.commentaire,
       };
