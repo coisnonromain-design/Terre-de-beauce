@@ -1290,6 +1290,152 @@ async def delete_pointage(pointage_id: str):
         raise HTTPException(status_code=404, detail="Pointage non trouvé")
     return {"message": "Pointage supprimé"}
 
+# ============= NOTES DE FRAIS ROUTES =============
+@api_router.get("/notes-frais")
+async def get_notes_frais(chauffeur_id: Optional[str] = None, statut: Optional[str] = None):
+    """Liste des notes de frais"""
+    query = {}
+    if chauffeur_id:
+        query["chauffeur_id"] = chauffeur_id
+    if statut:
+        query["statut"] = statut
+    notes = await db.notes_frais.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
+    return notes
+
+@api_router.get("/notes-frais/{note_id}")
+async def get_note_frais(note_id: str):
+    """Récupère une note de frais"""
+    note = await db.notes_frais.find_one({"id": note_id}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Note de frais non trouvée")
+    return note
+
+@api_router.post("/notes-frais")
+async def create_note_frais(note: NoteFraisCreate):
+    """Créer une note de frais avec photo optionnelle"""
+    chauffeur = await db.chauffeurs.find_one({"id": note.chauffeur_id}, {"_id": 0})
+    if not chauffeur:
+        raise HTTPException(status_code=404, detail="Chauffeur non trouvé")
+    
+    chantier = None
+    if note.chantier_id:
+        chantier = await db.chantiers.find_one({"id": note.chantier_id}, {"_id": 0})
+    
+    # Sauvegarder la photo en base64 si fournie
+    photo_url = None
+    if note.photo_base64:
+        # Stocker la photo en base64 data URL
+        photo_url = note.photo_base64 if note.photo_base64.startswith('data:') else f"data:image/jpeg;base64,{note.photo_base64}"
+    
+    note_dict = {
+        "id": str(uuid.uuid4())[:8].upper(),
+        "chauffeur_id": note.chauffeur_id,
+        "chauffeur_nom": f"{chauffeur.get('prenom', '')} {chauffeur.get('nom', '')}".strip(),
+        "pointage_id": note.pointage_id,
+        "chantier_id": note.chantier_id,
+        "chantier_reference": chantier.get('reference') if chantier else None,
+        "date": note.date,
+        "montant": note.montant,
+        "type_frais": note.type_frais,
+        "description": note.description,
+        "photo_url": photo_url,
+        "statut": "en_attente",
+        "date_creation": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.notes_frais.insert_one(note_dict)
+    return note_dict
+
+@api_router.put("/notes-frais/{note_id}/statut")
+async def update_note_frais_statut(note_id: str, statut: str = Query(..., enum=["en_attente", "valide", "refuse", "rembourse"])):
+    """Mettre à jour le statut d'une note de frais"""
+    note = await db.notes_frais.find_one({"id": note_id}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Note de frais non trouvée")
+    
+    await db.notes_frais.update_one({"id": note_id}, {"$set": {"statut": statut}})
+    return {"message": f"Statut mis à jour: {statut}"}
+
+@api_router.delete("/notes-frais/{note_id}")
+async def delete_note_frais(note_id: str):
+    """Supprimer une note de frais"""
+    result = await db.notes_frais.delete_one({"id": note_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Note de frais non trouvée")
+    return {"message": "Note de frais supprimée"}
+
+# ============= PHOTOS POINTAGE ROUTES =============
+@api_router.post("/pointages/{pointage_id}/photos")
+async def add_photo_to_pointage(pointage_id: str, photo_base64: str, description: Optional[str] = None):
+    """Ajouter une photo à un pointage"""
+    pointage = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    if not pointage:
+        raise HTTPException(status_code=404, detail="Pointage non trouvé")
+    
+    photos = pointage.get('photos', [])
+    
+    photo_url = photo_base64 if photo_base64.startswith('data:') else f"data:image/jpeg;base64,{photo_base64}"
+    
+    photo = {
+        "id": str(uuid.uuid4())[:8].upper(),
+        "url": photo_url,
+        "type": "pointage",
+        "description": description,
+        "date_creation": datetime.now(timezone.utc).isoformat()
+    }
+    
+    photos.append(photo)
+    
+    await db.pointages.update_one({"id": pointage_id}, {"$set": {"photos": photos}})
+    
+    return photo
+
+@api_router.delete("/pointages/{pointage_id}/photos/{photo_id}")
+async def delete_photo_from_pointage(pointage_id: str, photo_id: str):
+    """Supprimer une photo d'un pointage"""
+    pointage = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    if not pointage:
+        raise HTTPException(status_code=404, detail="Pointage non trouvé")
+    
+    photos = [p for p in pointage.get('photos', []) if p.get('id') != photo_id]
+    
+    await db.pointages.update_one({"id": pointage_id}, {"$set": {"photos": photos}})
+    
+    return {"message": "Photo supprimée"}
+
+# ============= OFFLINE SYNC ROUTES =============
+@api_router.post("/sync/pointages")
+async def sync_offline_pointages(pointages: List[dict]):
+    """Synchroniser les pointages créés hors-ligne"""
+    results = {"success": [], "errors": []}
+    
+    for p in pointages:
+        try:
+            # Vérifier si le pointage existe déjà
+            existing = await db.pointages.find_one({
+                "chauffeur_id": p.get("chauffeur_id"),
+                "chantier_id": p.get("chantier_id"),
+                "date": p.get("date")
+            }, {"_id": 0})
+            
+            if existing:
+                # Mettre à jour
+                await db.pointages.update_one(
+                    {"id": existing["id"]},
+                    {"$set": p}
+                )
+                results["success"].append({"offline_id": p.get("offline_id"), "server_id": existing["id"], "action": "updated"})
+            else:
+                # Créer
+                p["id"] = str(uuid.uuid4())[:8].upper()
+                p["date_creation"] = datetime.now(timezone.utc).isoformat()
+                await db.pointages.insert_one(p)
+                results["success"].append({"offline_id": p.get("offline_id"), "server_id": p["id"], "action": "created"})
+        except Exception as e:
+            results["errors"].append({"offline_id": p.get("offline_id"), "error": str(e)})
+    
+    return results
+
 # ============= POINTAGES PDF ROUTES =============
 def generate_pointage_pdf_html(pointage: dict, chauffeur: dict, chantier: dict, config: dict) -> str:
     """Génère le HTML pour un PDF de pointage journalier"""
