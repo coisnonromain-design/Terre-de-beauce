@@ -446,6 +446,7 @@ export default function Factures() {
                   <TableHead>Chantier</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Montant TTC</TableHead>
+                  <TableHead>Banque</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead>Signature DocuSign</TableHead>
                   <TableHead className="w-32">Actions</TableHead>
