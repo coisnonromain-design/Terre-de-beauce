@@ -223,7 +223,14 @@ export default function Factures() {
       await axios.post(`${API}/factures/generer`, form);
       toast.success("Facture générée avec succès");
       setDialogOpen(false);
-      setForm({ chantier_id: "", date_echeance: "", notes: "" });
+      // Réinitialiser le formulaire avec le compte par défaut
+      const compteDefault = comptesBancaires.find(c => c.is_default);
+      setForm({ 
+        chantier_id: "", 
+        date_echeance: "", 
+        notes: "",
+        compte_bancaire_id: compteDefault?.id || "",
+      });
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Erreur lors de la génération");
