@@ -2428,8 +2428,9 @@ def generate_facture_html(facture: dict, config: dict) -> str:
         <div class="payment">
             <div class="payment-title">Modalités de paiement</div>
             <p>Paiement à 30 jours à compter de la date d'émission de la facture.</p>
-            {f"<p>IBAN: {config.get('iban', '')}</p>" if config.get('iban') else ""}
-            {f"<p>BIC: {config.get('bic', '')}</p>" if config.get('bic') else ""}
+            {f"<p><strong>{facture.get('compte_bancaire_nom', '')}</strong></p>" if facture.get('compte_bancaire_nom') else ""}
+            {f"<p>IBAN: {facture.get('compte_bancaire_iban', '')}</p>" if facture.get('compte_bancaire_iban') else (f"<p>IBAN: {config.get('iban', '')}</p>" if config.get('iban') else "")}
+            {f"<p>BIC: {facture.get('compte_bancaire_bic', '')}</p>" if facture.get('compte_bancaire_bic') else (f"<p>BIC: {config.get('bic', '')}</p>" if config.get('bic') else "")}
         </div>
         
         <div class="footer">
