@@ -2851,7 +2851,7 @@ async def get_dashboard_stats():
     }
 
 # ============= NOTIFICATIONS ROUTES =============
-@app.get("/api/notifications")
+@api_router.get("/notifications")
 async def get_notifications():
     """Récupère les notifications et alertes"""
     notifications = []
