@@ -120,15 +120,39 @@ export default function Configuration() {
     bic: "",
   });
   const [baremes, setBaremes] = useState(null);
+  const [comptesBancaires, setComptesBancaires] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingBaremes, setSavingBaremes] = useState(false);
   const [activeBaremeTab, setActiveBaremeTab] = useState("solide_avec_gasoil");
+  
+  // États pour le dialog compte bancaire
+  const [compteDialogOpen, setCompteDialogOpen] = useState(false);
+  const [editingCompte, setEditingCompte] = useState(null);
+  const [compteForm, setCompteForm] = useState({
+    nom_banque: "",
+    iban: "",
+    bic: "",
+    is_default: false,
+  });
+  const [savingCompte, setSavingCompte] = useState(false);
+  const [deleteCompteDialogOpen, setDeleteCompteDialogOpen] = useState(false);
+  const [compteToDelete, setCompteToDelete] = useState(null);
 
   useEffect(() => {
     fetchConfig();
     fetchBaremes();
+    fetchComptesBancaires();
   }, []);
+
+  const fetchComptesBancaires = async () => {
+    try {
+      const res = await axios.get(`${API}/comptes-bancaires`);
+      setComptesBancaires(res.data);
+    } catch (error) {
+      console.error("Erreur chargement comptes bancaires:", error);
+    }
+  };
 
   const fetchConfig = async () => {
     try {
