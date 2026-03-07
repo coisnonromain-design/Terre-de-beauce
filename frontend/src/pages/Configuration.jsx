@@ -212,6 +212,67 @@ export default function Configuration() {
     }));
   };
 
+  // Gestion des comptes bancaires
+  const openNewCompteDialog = () => {
+    setEditingCompte(null);
+    setCompteForm({
+      nom_banque: "",
+      iban: "",
+      bic: "",
+      is_default: comptesBancaires.length === 0,
+    });
+    setCompteDialogOpen(true);
+  };
+
+  const openEditCompteDialog = (compte) => {
+    setEditingCompte(compte);
+    setCompteForm({
+      nom_banque: compte.nom_banque,
+      iban: compte.iban,
+      bic: compte.bic,
+      is_default: compte.is_default,
+    });
+    setCompteDialogOpen(true);
+  };
+
+  const handleSaveCompte = async () => {
+    if (!compteForm.nom_banque || !compteForm.iban || !compteForm.bic) {
+      toast.error("Veuillez remplir tous les champs");
+      return;
+    }
+    
+    setSavingCompte(true);
+    try {
+      if (editingCompte) {
+        await axios.put(`${API}/comptes-bancaires/${editingCompte.id}`, compteForm);
+        toast.success("Compte bancaire modifié");
+      } else {
+        await axios.post(`${API}/comptes-bancaires`, compteForm);
+        toast.success("Compte bancaire ajouté");
+      }
+      setCompteDialogOpen(false);
+      fetchComptesBancaires();
+    } catch (error) {
+      toast.error("Erreur lors de l'enregistrement");
+    } finally {
+      setSavingCompte(false);
+    }
+  };
+
+  const handleDeleteCompte = async () => {
+    if (!compteToDelete) return;
+    try {
+      await axios.delete(`${API}/comptes-bancaires/${compteToDelete.id}`);
+      toast.success("Compte bancaire supprimé");
+      fetchComptesBancaires();
+    } catch (error) {
+      toast.error("Erreur lors de la suppression");
+    } finally {
+      setDeleteCompteDialogOpen(false);
+      setCompteToDelete(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
