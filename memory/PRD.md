@@ -63,6 +63,7 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - Champs modifiables : nom, interlocuteur, adresse, email, téléphone, prix, unité
   - Workflow de statut : Brouillon → Envoyé → Signé
   - Visualisation du contrat formaté
+  - **Génération et téléchargement PDF** du contrat
 - ✅ **Signature électronique DocuSign pour Contrats et Factures**
   - Envoi des contrats CCPA pour signature via DocuSign
   - Envoi des factures pour signature via DocuSign
