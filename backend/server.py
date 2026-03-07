@@ -1208,7 +1208,7 @@ async def generer_facture(input: FactureCreate):
             tours = pointage.get('tours', [])
             for tour in tours:
                 volume = tour.get('volume', 0)
-                distance = tour.get('distance', 0)
+                distance = tour.get('distance_km', 0)  # Use distance_km field
                 
                 if volume > 0 and distance > 0 and bareme:
                     # Trouver le prix dans le barème
