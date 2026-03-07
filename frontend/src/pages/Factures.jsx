@@ -448,6 +448,17 @@ export default function Factures() {
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          asChild
+                          title="Voir le PDF"
+                          data-testid={`view-pdf-facture-${facture.id}`}
+                        >
+                          <a href={`${API}/factures/${facture.id}/pdf`} target="_blank" rel="noopener noreferrer">
+                            <FileDown className="w-4 h-4 text-red-600" />
+                          </a>
+                        </Button>
                         {facture.statut === "brouillon" && (
                           <Button
                             variant="ghost"
