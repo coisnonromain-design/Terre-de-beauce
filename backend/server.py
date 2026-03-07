@@ -2302,6 +2302,28 @@ async def update_facture_statut(facture_id: str, statut: FactureStatus):
     updated = await db.factures.find_one({"id": facture_id}, {"_id": 0})
     return updated
 
+@api_router.put("/factures/{facture_id}/compte-bancaire")
+async def update_facture_compte_bancaire(facture_id: str, compte_bancaire_id: str):
+    """Met à jour le compte bancaire d'une facture"""
+    existing = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    compte_bancaire = await db.comptes_bancaires.find_one({"id": compte_bancaire_id}, {"_id": 0})
+    if not compte_bancaire:
+        raise HTTPException(status_code=404, detail="Compte bancaire non trouvé")
+    
+    update_data = {
+        "compte_bancaire_id": compte_bancaire['id'],
+        "compte_bancaire_nom": compte_bancaire.get('nom_banque'),
+        "compte_bancaire_iban": compte_bancaire.get('iban'),
+        "compte_bancaire_bic": compte_bancaire.get('bic')
+    }
+    
+    await db.factures.update_one({"id": facture_id}, {"$set": update_data})
+    updated = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    return updated
+
 @api_router.delete("/factures/{facture_id}")
 async def delete_facture(facture_id: str):
     result = await db.factures.delete_one({"id": facture_id})
