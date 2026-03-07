@@ -1,23 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
 import {
   Truck,
-  LogIn,
   Clock,
-  Weight,
   MapPin,
   HardHat,
   Calendar,
   Save,
   LogOut,
-  CheckCircle,
   Plus,
   Trash2,
   Route,
-  Fuel,
-  ArrowLeft,
+  Camera,
+  Receipt,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Check,
+  Image,
+  Euro,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,31 +38,139 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// IndexedDB pour le mode hors-ligne
+const DB_NAME = 'TerreDeBeauceDB';
+const DB_VERSION = 1;
+
+function openDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('pending-pointages')) {
+        db.createObjectStore('pending-pointages', { keyPath: 'offline_id', autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains('pending-notes-frais')) {
+        db.createObjectStore('pending-notes-frais', { keyPath: 'offline_id', autoIncrement: true });
+      }
+    };
+  });
+}
+
+async function savePendingPointage(pointage) {
+  const db = await openDatabase();
+  const tx = db.transaction('pending-pointages', 'readwrite');
+  const store = tx.objectStore('pending-pointages');
+  await store.add({ ...pointage, offline_id: Date.now() });
+}
+
+async function getPendingPointages() {
+  const db = await openDatabase();
+  const tx = db.transaction('pending-pointages', 'readonly');
+  const store = tx.objectStore('pending-pointages');
+  return new Promise((resolve) => {
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve([]);
+  });
+}
+
+async function clearPendingPointages() {
+  const db = await openDatabase();
+  const tx = db.transaction('pending-pointages', 'readwrite');
+  const store = tx.objectStore('pending-pointages');
+  await store.clear();
+}
+
+const typesFrais = [
+  { value: 'carburant', label: 'Carburant', icon: '⛽' },
+  { value: 'peage', label: 'Péage', icon: '🛣️' },
+  { value: 'repas', label: 'Repas', icon: '🍽️' },
+  { value: 'hebergement', label: 'Hébergement', icon: '🏨' },
+  { value: 'autre', label: 'Autre', icon: '📋' },
+];
+
 export default function ChauffeurPortal() {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [chauffeur, setChauffeur] = useState(null);
   const [loading, setLoading] = useState(true);
   const [chantiers, setChantiers] = useState([]);
   const [pointages, setPointages] = useState([]);
+  const [notesFrais, setNotesFrais] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingSync, setPendingSync] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [showTours, setShowTours] = useState(true);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [notesFraisOpen, setNotesFraisOpen] = useState(false);
+  const [capturedPhoto, setCapturedPhoto] = useState(null);
+  const [photoType, setPhotoType] = useState('pointage'); // 'pointage' ou 'note_frais'
+
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
 
   const [form, setForm] = useState({
     chantier_id: "",
     date: new Date().toISOString().split("T")[0],
     heures_travaillees: "",
-    commentaire: "",
   });
 
-  // Tours (trajets) avec volume et distance
   const [tours, setTours] = useState([]);
+  const [photos, setPhotos] = useState([]);
+
+  const [noteFraisForm, setNoteFraisForm] = useState({
+    date: new Date().toISOString().split("T")[0],
+    montant: "",
+    type_frais: "carburant",
+    description: "",
+    photo_base64: null,
+  });
+
+  // Gestion online/offline
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast.success("Connexion rétablie");
+      syncOfflineData();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast.warning("Mode hors-ligne activé");
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
-    // Vérifier si connecté
     const savedChauffeur = localStorage.getItem("chauffeur_session");
     if (!savedChauffeur) {
       navigate("/chauffeur/login");
@@ -65,10 +179,35 @@ export default function ChauffeurPortal() {
     
     const session = JSON.parse(savedChauffeur);
     setChauffeur(session);
-    setIsLoggedIn(true);
-    fetchChauffeurData(session.chauffeur_id);
+    fetchData(session.chauffeur_id);
+    checkPendingSync();
     setLoading(false);
   }, [navigate]);
+
+  const checkPendingSync = async () => {
+    const pending = await getPendingPointages();
+    setPendingSync(pending.length);
+  };
+
+  const syncOfflineData = async () => {
+    if (!isOnline) return;
+    
+    setSyncing(true);
+    try {
+      const pending = await getPendingPointages();
+      if (pending.length > 0) {
+        await axios.post(`${API}/sync/pointages`, pending);
+        await clearPendingPointages();
+        setPendingSync(0);
+        toast.success(`${pending.length} pointage(s) synchronisé(s)`);
+        fetchData(chauffeur?.chauffeur_id);
+      }
+    } catch (error) {
+      console.error("Erreur sync:", error);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("chauffeur_session");
@@ -76,440 +215,610 @@ export default function ChauffeurPortal() {
     navigate("/");
   };
 
-  const fetchChauffeurData = async (chauffeurId) => {
+  const fetchData = async (chauffeurId) => {
     try {
-      const [chantiersRes, pointagesRes] = await Promise.all([
-        axios.get(`${API}/chauffeur/${chauffeurId}/chantiers`),
+      const [chantiersRes, pointagesRes, notesRes] = await Promise.all([
+        axios.get(`${API}/chantiers?statut=en_cours`),
         axios.get(`${API}/pointages?chauffeur_id=${chauffeurId}`),
+        axios.get(`${API}/notes-frais?chauffeur_id=${chauffeurId}`),
       ]);
       setChantiers(chantiersRes.data);
       setPointages(pointagesRes.data);
+      setNotesFrais(notesRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
     }
   };
 
-  // Ajouter un tour
+  // Caméra
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' },
+        audio: false 
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setCameraOpen(true);
+    } catch (error) {
+      toast.error("Impossible d'accéder à la caméra");
+      console.error("Camera error:", error);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+    setCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      setCapturedPhoto(dataUrl);
+      stopCamera();
+    }
+  };
+
+  const confirmPhoto = () => {
+    if (photoType === 'pointage') {
+      setPhotos([...photos, { id: Date.now(), url: capturedPhoto }]);
+    } else {
+      setNoteFraisForm({ ...noteFraisForm, photo_base64: capturedPhoto });
+    }
+    setCapturedPhoto(null);
+  };
+
+  // Gestion des tours
   const addTour = () => {
-    setTours([...tours, { volume: "", distance: "" }]);
+    setTours([...tours, { 
+      id: Date.now().toString(),
+      volume: "",
+      distance_km: "",
+      commentaire: ""
+    }]);
   };
 
-  // Supprimer un tour
-  const removeTour = (index) => {
-    setTours(tours.filter((_, i) => i !== index));
-  };
-
-  // Mettre à jour un tour
   const updateTour = (index, field, value) => {
     const newTours = [...tours];
     newTours[index][field] = value;
     setTours(newTours);
   };
 
-  // Calculer les totaux
-  const totalVolume = tours.reduce((sum, t) => sum + (parseFloat(t.volume) || 0), 0);
-  const totalDistance = tours.reduce((sum, t) => sum + (parseFloat(t.distance) || 0), 0);
+  const removeTour = (index) => {
+    setTours(tours.filter((_, i) => i !== index));
+  };
 
-  // Obtenir les infos du chantier sélectionné
-  const selectedChantier = chantiers.find(c => c.id === form.chantier_id);
-  const transportType = selectedChantier?.transport_type || "solide";
-  const avecGasoil = selectedChantier?.avec_gasoil !== false;
-  const uniteVolume = transportType === "liquide" ? "m³" : "tonnes";
-
-  const handleSubmitPointage = async () => {
-    if (!form.chantier_id) {
-      toast.error("Veuillez sélectionner un chantier");
-      return;
-    }
-
-    if (!form.heures_travaillees && tours.length === 0) {
-      toast.error("Veuillez saisir les heures ou au moins un tour");
-      return;
-    }
-
-    // Valider les tours
-    const toursValides = tours.filter(t => t.volume && t.distance);
-    if (tours.length > 0 && toursValides.length !== tours.length) {
-      toast.error("Veuillez remplir le volume et la distance pour chaque tour");
+  // Sauvegarder le pointage
+  const handleSave = async () => {
+    if (!form.chantier_id || !form.date) {
+      toast.error("Chantier et date requis");
       return;
     }
 
     setSaving(true);
+    
+    const pointageData = {
+      chauffeur_id: chauffeur.chauffeur_id,
+      chantier_id: form.chantier_id,
+      date: form.date,
+      heures_travaillees: parseFloat(form.heures_travaillees) || 0,
+      tours: tours.map(t => ({
+        ...t,
+        volume: parseFloat(t.volume) || 0,
+        distance_km: parseFloat(t.distance_km) || 0,
+      })),
+      photos: photos,
+    };
+
+    if (!isOnline) {
+      // Mode hors-ligne
+      await savePendingPointage(pointageData);
+      setPendingSync(prev => prev + 1);
+      toast.success("Pointage sauvegardé localement");
+      resetForm();
+      setSaving(false);
+      return;
+    }
+
     try {
-      const payload = {
-        chantier_id: form.chantier_id,
-        chauffeur_id: chauffeur.chauffeur_id,
-        date: form.date,
-        heures_travaillees: parseFloat(form.heures_travaillees) || 0,
-        tours: toursValides.map(t => ({
-          volume: parseFloat(t.volume) || 0,
-          distance_km: parseFloat(t.distance) || 0,
-        })),
-        commentaire: form.commentaire,
-      };
-
-      await axios.post(`${API}/pointages`, payload);
-
-      toast.success("Pointage enregistré avec succès");
-      
-      // Reset form but keep date
-      setForm({
-        chantier_id: "",
-        date: form.date,
-        heures_travaillees: "",
-        commentaire: "",
-      });
-      setTours([]);
-
-      // Refresh pointages
-      fetchChauffeurData(chauffeur.chauffeur_id);
+      await axios.post(`${API}/pointages`, pointageData);
+      toast.success("Pointage enregistré !");
+      resetForm();
+      fetchData(chauffeur.chauffeur_id);
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Erreur lors de l'enregistrement");
+      toast.error(error.response?.data?.detail || "Erreur");
     } finally {
       setSaving(false);
     }
   };
 
-  // Login Screen - Redirect to login page
-  if (!isLoggedIn || loading) {
+  const resetForm = () => {
+    setForm({
+      chantier_id: "",
+      date: new Date().toISOString().split("T")[0],
+      heures_travaillees: "",
+    });
+    setTours([]);
+    setPhotos([]);
+  };
+
+  // Sauvegarder note de frais
+  const handleSaveNoteFrais = async () => {
+    if (!noteFraisForm.montant || !noteFraisForm.date) {
+      toast.error("Montant et date requis");
+      return;
+    }
+
+    try {
+      await axios.post(`${API}/notes-frais`, {
+        chauffeur_id: chauffeur.chauffeur_id,
+        chantier_id: form.chantier_id || null,
+        date: noteFraisForm.date,
+        montant: parseFloat(noteFraisForm.montant),
+        type_frais: noteFraisForm.type_frais,
+        description: noteFraisForm.description,
+        photo_base64: noteFraisForm.photo_base64,
+      });
+      toast.success("Note de frais enregistrée");
+      setNoteFraisOpen(false);
+      setNoteFraisForm({
+        date: new Date().toISOString().split("T")[0],
+        montant: "",
+        type_frais: "carburant",
+        description: "",
+        photo_base64: null,
+      });
+      fetchData(chauffeur.chauffeur_id);
+    } catch (error) {
+      toast.error("Erreur lors de l'enregistrement");
+    }
+  };
+
+  const selectedChantier = chantiers.find(c => c.id === form.chantier_id);
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1A4D2E]"></div>
       </div>
     );
   }
 
-  // Main Portal
   return (
-    <div className="min-h-screen bg-[#F8F9FA]">
-      {/* Header */}
-      <header className="bg-[#1A1D1F] text-white p-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+    <div className="min-h-screen bg-slate-100 pb-20" data-testid="chauffeur-portal-mobile">
+      {/* Header fixe */}
+      <header className="sticky top-0 z-50 bg-[#1A4D2E] text-white px-4 py-3 shadow-lg">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#D9A520] flex items-center justify-center">
-              <Truck className="w-6 h-6 text-[#1A1D1F]" />
+            <div className="w-10 h-10 rounded-xl bg-[#D9A520] flex items-center justify-center">
+              <Truck className="w-6 h-6 text-[#1A4D2E]" />
             </div>
             <div>
-              <p className="text-xs text-gray-400">Portail Chauffeur</p>
-              <p className="font-semibold">{chauffeur?.chauffeur_nom}</p>
+              <p className="font-bold text-sm">{chauffeur?.nom}</p>
+              <p className="text-xs text-white/70">Terre de Beauce</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="text-gray-400 hover:text-white"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Déconnexion
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Indicateur online/offline */}
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isOnline ? 'bg-green-500/20 text-green-200' : 'bg-red-500/20 text-red-200'}`}>
+              {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+              {isOnline ? 'En ligne' : 'Hors-ligne'}
+            </div>
+            {pendingSync > 0 && (
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="text-white h-8"
+                onClick={syncOfflineData}
+                disabled={!isOnline || syncing}
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                <Badge className="ml-1 bg-amber-500 text-xs">{pendingSync}</Badge>
+              </Button>
+            )}
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="text-white h-8"
+              onClick={handleLogout}
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4 space-y-6">
-        {/* Saisie Pointage */}
-        <Card>
-          <CardHeader className="border-b bg-[#1A4D2E] text-white rounded-t-lg">
-            <CardTitle className="text-xl font-['Barlow_Condensed'] flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Nouveau Pointage
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
-            {/* Chantier et Date */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label className="flex items-center gap-2">
-                  <HardHat className="w-4 h-4 text-[#D9A520]" />
-                  Chantier *
-                </Label>
-                <Select
-                  value={form.chantier_id}
-                  onValueChange={(value) => {
-                    setForm({ ...form, chantier_id: value });
-                    setTours([]); // Reset tours when changing chantier
-                  }}
-                >
-                  <SelectTrigger data-testid="chantier-select">
-                    <SelectValue placeholder="Sélectionner un chantier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {chantiers.map((chantier) => (
-                      <SelectItem key={chantier.id} value={chantier.id}>
-                        <div className="flex items-center gap-2">
-                          {chantier.reference} - {chantier.lieu}
-                          <Badge variant="outline" className="text-xs">
-                            {chantier.transport_type === "liquide" ? "Liquide" : "Solide"}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-[#D9A520]" />
-                  Date *
-                </Label>
-                <Input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  data-testid="date-input"
-                />
-              </div>
-            </div>
-
-            {/* Info chantier sélectionné */}
+      {/* Contenu principal */}
+      <div className="p-4 space-y-4">
+        {/* Sélection du chantier */}
+        <Card className="border-0 shadow-md">
+          <CardContent className="p-4">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Chantier</Label>
+            <Select value={form.chantier_id} onValueChange={(v) => setForm({...form, chantier_id: v})}>
+              <SelectTrigger className="mt-1" data-testid="mobile-select-chantier">
+                <SelectValue placeholder="Sélectionner un chantier" />
+              </SelectTrigger>
+              <SelectContent>
+                {chantiers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <div className="flex items-center gap-2">
+                      <HardHat className="w-4 h-4 text-[#D9A520]" />
+                      <span>{c.reference}</span>
+                      <span className="text-xs text-muted-foreground">- {c.lieu}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {selectedChantier && (
-              <div className="bg-slate-50 p-3 rounded-lg flex items-center gap-4 text-sm">
-                <Badge variant="outline" className={transportType === "liquide" ? "bg-blue-50" : "bg-amber-50"}>
-                  {transportType === "liquide" ? "Transport Liquide" : "Transport Solide"}
-                </Badge>
-                <span className={`flex items-center gap-1 ${avecGasoil ? 'text-green-600' : 'text-orange-600'}`}>
-                  <Fuel className="w-4 h-4" />
-                  {avecGasoil ? "Gasoil fourni" : "Sans gasoil"}
-                </span>
+              <div className="mt-2 p-2 bg-slate-50 rounded-lg text-sm">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin className="w-3 h-3" />
+                  {selectedChantier.lieu}
+                </div>
+                <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+                  <span className="font-medium">{selectedChantier.client_nom}</span>
+                </div>
               </div>
             )}
-
-            {/* Heures travaillées */}
-            <div>
-              <Label className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#D9A520]" />
-                Heures travaillées
-              </Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="24"
-                  value={form.heures_travaillees}
-                  onChange={(e) => setForm({ ...form, heures_travaillees: e.target.value })}
-                  placeholder="0"
-                  className="w-32"
-                  data-testid="heures-input"
-                />
-                <span className="text-muted-foreground">heures</span>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Tours (trajets) */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="flex items-center gap-2 text-base">
-                  <Route className="w-4 h-4 text-[#D9A520]" />
-                  Tours / Trajets
-                </Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addTour}
-                  disabled={!form.chantier_id}
-                  data-testid="add-tour-btn"
-                >
-                  <Plus className="w-4 h-4 mr-1" />
-                  Ajouter un tour
-                </Button>
-              </div>
-
-              {!form.chantier_id && (
-                <p className="text-sm text-muted-foreground italic">
-                  Sélectionnez un chantier pour ajouter des tours
-                </p>
-              )}
-
-              {tours.length === 0 && form.chantier_id && (
-                <p className="text-sm text-muted-foreground italic">
-                  Aucun tour ajouté. Cliquez sur "Ajouter un tour" pour saisir vos trajets.
-                </p>
-              )}
-
-              {/* Liste des tours */}
-              {tours.map((tour, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg"
-                >
-                  <span className="w-8 h-8 bg-[#1A4D2E] text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    {index + 1}
-                  </span>
-                  <div className="flex-1 grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Weight className="w-3 h-3" />
-                        Volume ({uniteVolume})
-                      </Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value={tour.volume}
-                        onChange={(e) => updateTour(index, "volume", e.target.value)}
-                        placeholder="0"
-                        className="h-9"
-                        data-testid={`tour-volume-${index}`}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        Distance (km)
-                      </Label>
-                      <Input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        value={tour.distance}
-                        onChange={(e) => updateTour(index, "distance", e.target.value)}
-                        placeholder="0"
-                        className="h-9"
-                        data-testid={`tour-distance-${index}`}
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeTour(index)}
-                    className="text-red-500 hover:text-red-700"
-                    data-testid={`remove-tour-${index}`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-
-              {/* Totaux */}
-              {tours.length > 0 && (
-                <div className="flex items-center gap-6 p-3 bg-[#1A4D2E]/10 rounded-lg">
-                  <span className="font-semibold text-[#1A4D2E]">Totaux :</span>
-                  <div className="flex items-center gap-2">
-                    <Weight className="w-4 h-4 text-[#1A4D2E]" />
-                    <span className="font-bold">{totalVolume.toFixed(1)}</span>
-                    <span className="text-sm text-muted-foreground">{uniteVolume}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-[#1A4D2E]" />
-                    <span className="font-bold">{totalDistance.toFixed(1)}</span>
-                    <span className="text-sm text-muted-foreground">km</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Route className="w-4 h-4 text-[#1A4D2E]" />
-                    <span className="font-bold">{tours.length}</span>
-                    <span className="text-sm text-muted-foreground">tour(s)</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Commentaire */}
-            <div>
-              <Label>Commentaire (optionnel)</Label>
-              <Textarea
-                value={form.commentaire}
-                onChange={(e) => setForm({ ...form, commentaire: e.target.value })}
-                placeholder="Notes, observations..."
-                rows={2}
-                data-testid="commentaire-input"
-              />
-            </div>
-
-            {/* Bouton Enregistrer */}
-            <Button
-              onClick={handleSubmitPointage}
-              disabled={saving || !form.chantier_id}
-              className="w-full bg-[#1A4D2E] hover:bg-[#143d24] h-12 text-lg"
-              data-testid="submit-pointage-btn"
-            >
-              <Save className="w-5 h-5 mr-2" />
-              {saving ? "Enregistrement..." : "Enregistrer le pointage"}
-            </Button>
           </CardContent>
         </Card>
 
-        {/* Historique des pointages */}
-        <Card>
-          <CardHeader className="border-b">
-            <CardTitle className="text-xl font-['Barlow_Condensed'] flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-[#D9A520]" />
-              Mes derniers pointages
-            </CardTitle>
+        {/* Date et heures */}
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="border-0 shadow-md">
+            <CardContent className="p-4">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Date</Label>
+              <Input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm({...form, date: e.target.value})}
+                className="mt-1"
+                data-testid="mobile-date-input"
+              />
+            </CardContent>
+          </Card>
+          <Card className="border-0 shadow-md">
+            <CardContent className="p-4">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">Heures</Label>
+              <div className="relative mt-1">
+                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={form.heures_travaillees}
+                  onChange={(e) => setForm({...form, heures_travaillees: e.target.value})}
+                  className="pl-10"
+                  data-testid="mobile-heures-input"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Section Tours */}
+        <Card className="border-0 shadow-md">
+          <CardHeader className="p-4 pb-2">
+            <div 
+              className="flex items-center justify-between cursor-pointer"
+              onClick={() => setShowTours(!showTours)}
+            >
+              <CardTitle className="text-base flex items-center gap-2">
+                <Route className="w-4 h-4 text-[#D9A520]" />
+                Tours ({tours.length})
+              </CardTitle>
+              {showTours ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </div>
           </CardHeader>
+          {showTours && (
+            <CardContent className="p-4 pt-0 space-y-3">
+              {tours.map((tour, index) => (
+                <div key={tour.id} className="p-3 bg-slate-50 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Tour {index + 1}</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-7 w-7 p-0 text-red-500"
+                      onClick={() => removeTour(index)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Volume (T/m³)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="0"
+                        value={tour.volume}
+                        onChange={(e) => updateTour(index, 'volume', e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Distance (km)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="0"
+                        value={tour.distance_km}
+                        onChange={(e) => updateTour(index, 'distance_km', e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                  <Input
+                    placeholder="Commentaire..."
+                    value={tour.commentaire}
+                    onChange={(e) => updateTour(index, 'commentaire', e.target.value)}
+                    className="h-9"
+                  />
+                </div>
+              ))}
+              <Button 
+                variant="outline" 
+                className="w-full border-dashed"
+                onClick={addTour}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Ajouter un tour
+              </Button>
+            </CardContent>
+          )}
+        </Card>
+
+        {/* Photos */}
+        <Card className="border-0 shadow-md">
           <CardContent className="p-4">
-            {pointages.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Aucun pointage enregistré
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {pointages.slice(0, 10).map((pointage) => (
-                  <div
-                    key={pointage.id}
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-[#1A4D2E]/10 rounded-lg flex items-center justify-center">
-                        <Calendar className="w-5 h-5 text-[#1A4D2E]" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{pointage.chantier_reference || "Chantier"}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(pointage.date).toLocaleDateString("fr-FR", {
-                            weekday: "long",
-                            day: "numeric",
-                            month: "long",
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      {pointage.heures_travaillees > 0 && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                          <span className="font-semibold">{pointage.heures_travaillees}h</span>
-                        </div>
-                      )}
-                      {pointage.nombre_tours > 0 && (
-                        <div className="flex items-center gap-1">
-                          <Route className="w-4 h-4 text-muted-foreground" />
-                          <span className="font-semibold">{pointage.nombre_tours} tours</span>
-                        </div>
-                      )}
-                      {pointage.total_volume > 0 && (
-                        <div className="flex items-center gap-1">
-                          <Weight className="w-4 h-4 text-muted-foreground" />
-                          <span className="font-semibold">
-                            {pointage.total_volume.toFixed(1)} {pointage.transport_type === "liquide" ? "m³" : "t"}
-                          </span>
-                        </div>
-                      )}
-                      {pointage.total_distance > 0 && (
-                        <div className="flex items-center gap-1">
-                          <MapPin className="w-4 h-4 text-muted-foreground" />
-                          <span className="font-semibold">{pointage.total_distance.toFixed(1)} km</span>
-                        </div>
-                      )}
-                      <Badge variant="outline" className="bg-green-50 text-green-700">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Enregistré
-                      </Badge>
-                    </div>
+            <div className="flex items-center justify-between mb-3">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                Photos ({photos.length})
+              </Label>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => { setPhotoType('pointage'); startCamera(); }}
+                className="h-8"
+              >
+                <Camera className="w-4 h-4 mr-1" />
+                Photo
+              </Button>
+            </div>
+            {photos.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {photos.map((photo, i) => (
+                  <div key={photo.id} className="relative flex-shrink-0">
+                    <img 
+                      src={photo.url} 
+                      alt={`Photo ${i+1}`} 
+                      className="w-20 h-20 object-cover rounded-lg"
+                    />
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="absolute -top-2 -right-2 w-6 h-6 p-0 rounded-full"
+                      onClick={() => setPhotos(photos.filter(p => p.id !== photo.id))}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
                   </div>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
-      </main>
+
+        {/* Statistiques rapides */}
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="bg-white rounded-lg p-3 shadow-sm">
+            <p className="text-xl font-bold text-[#1A4D2E]">{tours.reduce((s, t) => s + (parseFloat(t.volume) || 0), 0).toFixed(1)}</p>
+            <p className="text-xs text-muted-foreground">Volume total</p>
+          </div>
+          <div className="bg-white rounded-lg p-3 shadow-sm">
+            <p className="text-xl font-bold text-[#1A4D2E]">{tours.reduce((s, t) => s + (parseFloat(t.distance_km) || 0), 0).toFixed(1)}</p>
+            <p className="text-xs text-muted-foreground">Distance (km)</p>
+          </div>
+          <div className="bg-white rounded-lg p-3 shadow-sm">
+            <p className="text-xl font-bold text-[#1A4D2E]">{tours.length}</p>
+            <p className="text-xs text-muted-foreground">Tours</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Barre d'action fixe en bas */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-3 flex gap-2">
+        <Button 
+          variant="outline" 
+          className="flex-1"
+          onClick={() => setNotesFraisOpen(true)}
+        >
+          <Receipt className="w-4 h-4 mr-2" />
+          Note de frais
+        </Button>
+        <Button 
+          className="flex-1 bg-[#1A4D2E] hover:bg-[#143d24]"
+          onClick={handleSave}
+          disabled={saving || !form.chantier_id}
+          data-testid="mobile-save-btn"
+        >
+          {saving ? (
+            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4 mr-2" />
+          )}
+          Enregistrer
+        </Button>
+      </div>
+
+      {/* Modal Caméra */}
+      <Dialog open={cameraOpen} onOpenChange={(open) => { if (!open) stopCamera(); }}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden">
+          <div className="relative bg-black">
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              className="w-full"
+            />
+            <canvas ref={canvasRef} className="hidden" />
+            <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+              <Button 
+                variant="outline" 
+                className="rounded-full w-12 h-12 bg-white/90"
+                onClick={stopCamera}
+              >
+                <X className="w-6 h-6" />
+              </Button>
+              <Button 
+                className="rounded-full w-16 h-16 bg-white text-[#1A4D2E]"
+                onClick={capturePhoto}
+              >
+                <Camera className="w-8 h-8" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Preview Photo */}
+      <Dialog open={!!capturedPhoto} onOpenChange={() => setCapturedPhoto(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmer la photo</DialogTitle>
+          </DialogHeader>
+          {capturedPhoto && (
+            <img src={capturedPhoto} alt="Captured" className="w-full rounded-lg" />
+          )}
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setCapturedPhoto(null)}>
+              Reprendre
+            </Button>
+            <Button onClick={confirmPhoto} className="bg-[#1A4D2E]">
+              <Check className="w-4 h-4 mr-2" />
+              Confirmer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sheet Notes de frais */}
+      <Sheet open={notesFraisOpen} onOpenChange={setNotesFraisOpen}>
+        <SheetContent side="bottom" className="h-[85vh] rounded-t-xl">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-[#D9A520]" />
+              Nouvelle note de frais
+            </SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={noteFraisForm.date}
+                  onChange={(e) => setNoteFraisForm({...noteFraisForm, date: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label>Montant (€)</Label>
+                <div className="relative">
+                  <Euro className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={noteFraisForm.montant}
+                    onChange={(e) => setNoteFraisForm({...noteFraisForm, montant: e.target.value})}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <Label>Type de frais</Label>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                {typesFrais.map((type) => (
+                  <Button
+                    key={type.value}
+                    variant={noteFraisForm.type_frais === type.value ? "default" : "outline"}
+                    className={`h-auto py-3 flex-col ${noteFraisForm.type_frais === type.value ? 'bg-[#1A4D2E]' : ''}`}
+                    onClick={() => setNoteFraisForm({...noteFraisForm, type_frais: type.value})}
+                  >
+                    <span className="text-lg">{type.icon}</span>
+                    <span className="text-xs">{type.label}</span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                placeholder="Description du frais..."
+                value={noteFraisForm.description}
+                onChange={(e) => setNoteFraisForm({...noteFraisForm, description: e.target.value})}
+                rows={2}
+              />
+            </div>
+
+            <div>
+              <Label>Ticket / Justificatif</Label>
+              <div className="mt-1">
+                {noteFraisForm.photo_base64 ? (
+                  <div className="relative inline-block">
+                    <img 
+                      src={noteFraisForm.photo_base64} 
+                      alt="Ticket" 
+                      className="w-32 h-32 object-cover rounded-lg"
+                    />
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="absolute -top-2 -right-2 w-6 h-6 p-0 rounded-full"
+                      onClick={() => setNoteFraisForm({...noteFraisForm, photo_base64: null})}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    className="w-full border-dashed h-24 flex-col gap-2"
+                    onClick={() => { setPhotoType('note_frais'); startCamera(); setNotesFraisOpen(false); }}
+                  >
+                    <Camera className="w-6 h-6" />
+                    <span className="text-sm">Photographier le ticket</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <Button 
+              className="w-full bg-[#1A4D2E] hover:bg-[#143d24]"
+              onClick={handleSaveNoteFrais}
+              disabled={!noteFraisForm.montant}
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Enregistrer la note de frais
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
