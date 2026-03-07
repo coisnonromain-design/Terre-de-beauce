@@ -627,6 +627,30 @@ export default function Factures() {
                 data-testid="notes-input"
               />
             </div>
+            {comptesBancaires.length > 0 && (
+              <div>
+                <Label>Compte bancaire pour le paiement *</Label>
+                <Select
+                  value={form.compte_bancaire_id}
+                  onValueChange={(value) => setForm({ ...form, compte_bancaire_id: value })}
+                >
+                  <SelectTrigger data-testid="select-compte-bancaire">
+                    <Landmark className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Sélectionner un compte" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {comptesBancaires.map((compte) => (
+                      <SelectItem key={compte.id} value={compte.id}>
+                        {compte.nom_banque} {compte.is_default && "(par défaut)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Les coordonnées bancaires apparaîtront sur la facture
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
