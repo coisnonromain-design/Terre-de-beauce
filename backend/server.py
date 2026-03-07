@@ -1417,6 +1417,72 @@ async def delete_contrat_ccpa(contrat_id: str):
         raise HTTPException(status_code=404, detail="Contrat CCPA non trouvé")
     return {"message": "Contrat CCPA supprimé"}
 
+@api_router.get("/contrats-ccpa/{contrat_id}/pdf")
+async def get_contrat_ccpa_pdf(contrat_id: str):
+    """Génère et retourne le PDF du contrat CCPA"""
+    # Get contrat
+    contrat = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
+    if not contrat:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    
+    # Get entreprise config
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    if not config:
+        config = {"raison_sociale": "Terre de Beauce"}
+    
+    # Generate HTML
+    html_content = generate_contrat_ccpa_html(contrat, config)
+    
+    # Generate PDF
+    try:
+        pdf_bytes = HTML(string=html_content).write_pdf()
+        
+        filename = f"Contrat_{contrat['numero_contrat'].replace('/', '-')}.pdf"
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename={filename}"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur génération PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la génération du PDF: {str(e)}")
+
+@api_router.get("/contrats-ccpa/{contrat_id}/download")
+async def download_contrat_ccpa_pdf(contrat_id: str):
+    """Télécharge le PDF du contrat CCPA"""
+    # Get contrat
+    contrat = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
+    if not contrat:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    
+    # Get entreprise config
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    if not config:
+        config = {"raison_sociale": "Terre de Beauce"}
+    
+    # Generate HTML
+    html_content = generate_contrat_ccpa_html(contrat, config)
+    
+    # Generate PDF
+    try:
+        pdf_bytes = HTML(string=html_content).write_pdf()
+        
+        filename = f"Contrat_{contrat['numero_contrat'].replace('/', '-')}.pdf"
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur génération PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la génération du PDF: {str(e)}")
+
 # ============= DASHBOARD STATS =============
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats():
