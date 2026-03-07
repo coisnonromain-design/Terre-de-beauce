@@ -323,7 +323,7 @@ export default function Dashboard() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis 
-                    dataKey="month" 
+                    dataKey="mois" 
                     tick={{ fontSize: 12 }} 
                     tickLine={false}
                     axisLine={{ stroke: '#e5e7eb' }}
@@ -345,7 +345,7 @@ export default function Dashboard() {
                   />
                   <Area 
                     type="monotone" 
-                    dataKey="ca" 
+                    dataKey="montant" 
                     stroke="#1A4D2E" 
                     strokeWidth={2}
                     fill="url(#caGradient)" 
