@@ -1255,6 +1255,413 @@ async def delete_pointage(pointage_id: str):
         raise HTTPException(status_code=404, detail="Pointage non trouvé")
     return {"message": "Pointage supprimé"}
 
+# ============= POINTAGES PDF ROUTES =============
+def generate_pointage_pdf_html(pointage: dict, chauffeur: dict, chantier: dict, config: dict) -> str:
+    """Génère le HTML pour un PDF de pointage journalier"""
+    tours_html = ""
+    for i, tour in enumerate(pointage.get('tours', []), 1):
+        tours_html += f"""
+        <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;">{i}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{tour.get('volume', 0)} {tour.get('unite_volume', 'tonnes')}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{tour.get('distance', tour.get('distance_km', 0))} km</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{tour.get('commentaire', '-')}</td>
+        </tr>
+        """
+    
+    if not tours_html:
+        tours_html = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #666;">Aucun tour enregistré</td></tr>'
+    
+    photos_html = ""
+    if pointage.get('photos'):
+        photos_html = '<div class="photos"><h3>Photos jointes</h3><div class="photo-grid">'
+        for photo in pointage.get('photos', []):
+            photos_html += f'<img src="{photo.get("url", "")}" alt="Photo" style="max-width: 200px; margin: 5px;"/>'
+        photos_html += '</div></div>'
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 30px; color: #333; }}
+            .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #1A4D2E; padding-bottom: 20px; }}
+            .company {{ }}
+            .company h1 {{ color: #1A4D2E; margin: 0; font-size: 24px; }}
+            .doc-info {{ text-align: right; }}
+            .doc-title {{ font-size: 20px; font-weight: bold; color: #1A4D2E; }}
+            .info-grid {{ display: flex; gap: 30px; margin-bottom: 25px; }}
+            .info-box {{ flex: 1; padding: 15px; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #1A4D2E; }}
+            .info-box h3 {{ margin: 0 0 10px 0; color: #1A4D2E; font-size: 14px; text-transform: uppercase; }}
+            .info-box p {{ margin: 5px 0; }}
+            table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+            th {{ background: #1A4D2E; color: white; padding: 12px; text-align: left; }}
+            .totals {{ background: #f9f9f9; padding: 20px; border-radius: 8px; margin-top: 20px; }}
+            .totals-grid {{ display: flex; justify-content: space-around; text-align: center; }}
+            .total-item {{ }}
+            .total-value {{ font-size: 28px; font-weight: bold; color: #1A4D2E; }}
+            .total-label {{ font-size: 12px; color: #666; }}
+            .signature {{ margin-top: 40px; display: flex; justify-content: space-between; }}
+            .signature-box {{ width: 45%; }}
+            .signature-line {{ border-bottom: 1px solid #333; height: 50px; margin-top: 30px; }}
+            .photos {{ margin-top: 30px; }}
+            .photo-grid {{ display: flex; flex-wrap: wrap; gap: 10px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="company">
+                <h1>{config.get('raison_sociale', 'TERRE DE BEAUCE')}</h1>
+                <p>{config.get('adresse', '')}<br>{config.get('code_postal', '')} {config.get('ville', '')}</p>
+            </div>
+            <div class="doc-info">
+                <div class="doc-title">FICHE DE POINTAGE</div>
+                <p><strong>Date:</strong> {pointage.get('date', '')}</p>
+                <p><strong>Réf:</strong> PTG-{pointage.get('id', '')}</p>
+            </div>
+        </div>
+        
+        <div class="info-grid">
+            <div class="info-box">
+                <h3>Chauffeur</h3>
+                <p><strong>{chauffeur.get('prenom', '')} {chauffeur.get('nom', '')}</strong></p>
+                <p>Code: {chauffeur.get('code_acces', '')}</p>
+            </div>
+            <div class="info-box">
+                <h3>Chantier</h3>
+                <p><strong>{chantier.get('reference', '')}</strong></p>
+                <p>{chantier.get('lieu', '')}</p>
+                <p>Client: {chantier.get('client_nom', '')}</p>
+            </div>
+            <div class="info-box">
+                <h3>Type de transport</h3>
+                <p><strong>{chantier.get('transport_type', 'solide').capitalize()}</strong></p>
+                <p>Gasoil: {'Fourni' if chantier.get('avec_gasoil', True) else 'Non fourni'}</p>
+            </div>
+        </div>
+        
+        <h3 style="color: #1A4D2E;">Détail des tours</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 60px;">Tour</th>
+                    <th>Volume</th>
+                    <th>Distance</th>
+                    <th>Commentaire</th>
+                </tr>
+            </thead>
+            <tbody>
+                {tours_html}
+            </tbody>
+        </table>
+        
+        <div class="totals">
+            <div class="totals-grid">
+                <div class="total-item">
+                    <div class="total-value">{pointage.get('heures_travaillees', 0)}h</div>
+                    <div class="total-label">Heures travaillées</div>
+                </div>
+                <div class="total-item">
+                    <div class="total-value">{pointage.get('nombre_tours', len(pointage.get('tours', [])))}</div>
+                    <div class="total-label">Nombre de tours</div>
+                </div>
+                <div class="total-item">
+                    <div class="total-value">{pointage.get('total_volume', 0):.1f}</div>
+                    <div class="total-label">Volume total ({chantier.get('transport_type', 'solide') == 'liquide' and 'm³' or 'tonnes'})</div>
+                </div>
+                <div class="total-item">
+                    <div class="total-value">{pointage.get('total_distance', 0):.1f} km</div>
+                    <div class="total-label">Distance totale</div>
+                </div>
+            </div>
+        </div>
+        
+        {photos_html}
+        
+        <div class="signature">
+            <div class="signature-box">
+                <p><strong>Signature du chauffeur</strong></p>
+                <div class="signature-line"></div>
+                <p style="font-size: 12px; color: #666;">Date: {pointage.get('date', '')}</p>
+            </div>
+            <div class="signature-box">
+                <p><strong>Signature du responsable</strong></p>
+                <div class="signature-line"></div>
+                <p style="font-size: 12px; color: #666;">Date:</p>
+            </div>
+        </div>
+        
+        <p style="margin-top: 40px; font-size: 11px; color: #888; text-align: center;">
+            Document généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')} - {config.get('raison_sociale', '')}
+        </p>
+    </body>
+    </html>
+    """
+    return html
+
+def generate_recap_pointages_pdf_html(chantier: dict, pointages: list, config: dict) -> str:
+    """Génère le HTML pour un PDF récapitulatif de tous les pointages d'un chantier"""
+    
+    # Calculer les totaux
+    total_heures = sum(p.get('heures_travaillees', 0) for p in pointages)
+    total_tours = sum(p.get('nombre_tours', len(p.get('tours', []))) for p in pointages)
+    total_volume = sum(p.get('total_volume', 0) for p in pointages)
+    total_distance = sum(p.get('total_distance', 0) for p in pointages)
+    
+    # Générer les lignes du tableau
+    rows_html = ""
+    for p in sorted(pointages, key=lambda x: x.get('date', '')):
+        rows_html += f"""
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd;">{p.get('date', '')}</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{p.get('chauffeur_nom', '')}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">{p.get('heures_travaillees', 0)}h</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">{p.get('nombre_tours', len(p.get('tours', [])))}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">{p.get('total_volume', 0):.1f}</td>
+            <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">{p.get('total_distance', 0):.1f} km</td>
+        </tr>
+        """
+    
+    if not rows_html:
+        rows_html = '<tr><td colspan="6" style="padding: 30px; text-align: center; color: #666;">Aucun pointage enregistré</td></tr>'
+    
+    unite_volume = "m³" if chantier.get('transport_type') == 'liquide' else "tonnes"
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 30px; color: #333; }}
+            .header {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #1A4D2E; padding-bottom: 20px; }}
+            .company h1 {{ color: #1A4D2E; margin: 0; font-size: 24px; }}
+            .doc-info {{ text-align: right; }}
+            .doc-title {{ font-size: 22px; font-weight: bold; color: #1A4D2E; }}
+            .chantier-info {{ background: linear-gradient(135deg, #1A4D2E 0%, #2d7a4a 100%); color: white; padding: 25px; border-radius: 10px; margin-bottom: 30px; }}
+            .chantier-info h2 {{ margin: 0 0 10px 0; }}
+            .chantier-grid {{ display: flex; gap: 40px; margin-top: 15px; }}
+            .chantier-item {{ }}
+            .chantier-label {{ font-size: 12px; opacity: 0.8; }}
+            .chantier-value {{ font-size: 16px; font-weight: bold; }}
+            table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+            th {{ background: #1A4D2E; color: white; padding: 12px; text-align: left; }}
+            .summary {{ display: flex; gap: 20px; margin-top: 30px; }}
+            .summary-box {{ flex: 1; background: #f5f5f5; padding: 20px; border-radius: 10px; text-align: center; border-top: 4px solid #D9A520; }}
+            .summary-value {{ font-size: 32px; font-weight: bold; color: #1A4D2E; }}
+            .summary-label {{ font-size: 12px; color: #666; margin-top: 5px; }}
+            .footer {{ margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; }}
+            .signature-grid {{ display: flex; justify-content: space-between; margin-top: 30px; }}
+            .signature-box {{ width: 30%; text-align: center; }}
+            .signature-line {{ border-bottom: 1px solid #333; height: 40px; margin-top: 20px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="company">
+                <h1>{config.get('raison_sociale', 'TERRE DE BEAUCE')}</h1>
+                <p>{config.get('adresse', '')}<br>{config.get('code_postal', '')} {config.get('ville', '')}</p>
+                <p>SIRET: {config.get('siret', '')} | TVA: {config.get('tva_intracommunautaire', '')}</p>
+            </div>
+            <div class="doc-info">
+                <div class="doc-title">RÉCAPITULATIF<br>DES POINTAGES</div>
+                <p>Document justificatif</p>
+            </div>
+        </div>
+        
+        <div class="chantier-info">
+            <h2>{chantier.get('reference', '')} - {chantier.get('lieu', '')}</h2>
+            <div class="chantier-grid">
+                <div class="chantier-item">
+                    <div class="chantier-label">Client</div>
+                    <div class="chantier-value">{chantier.get('client_nom', '')}</div>
+                </div>
+                <div class="chantier-item">
+                    <div class="chantier-label">Période</div>
+                    <div class="chantier-value">{chantier.get('date_debut', '')} → {chantier.get('date_fin', 'En cours')}</div>
+                </div>
+                <div class="chantier-item">
+                    <div class="chantier-label">Type</div>
+                    <div class="chantier-value">{chantier.get('transport_type', 'solide').capitalize()} {'(gasoil fourni)' if chantier.get('avec_gasoil', True) else '(sans gasoil)'}</div>
+                </div>
+                <div class="chantier-item">
+                    <div class="chantier-label">Contrat</div>
+                    <div class="chantier-value">{chantier.get('numero_contrat', '-')}</div>
+                </div>
+            </div>
+        </div>
+        
+        <h3 style="color: #1A4D2E;">Détail des pointages ({len(pointages)} jour(s))</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Chauffeur</th>
+                    <th style="text-align: center;">Heures</th>
+                    <th style="text-align: center;">Tours</th>
+                    <th style="text-align: right;">Volume ({unite_volume})</th>
+                    <th style="text-align: right;">Distance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+            <tfoot>
+                <tr style="background: #e8f5e9; font-weight: bold;">
+                    <td colspan="2" style="padding: 12px; border: 1px solid #ddd;">TOTAUX</td>
+                    <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">{total_heures}h</td>
+                    <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">{total_tours}</td>
+                    <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">{total_volume:.1f}</td>
+                    <td style="padding: 12px; border: 1px solid #ddd; text-align: right;">{total_distance:.1f} km</td>
+                </tr>
+            </tfoot>
+        </table>
+        
+        <div class="summary">
+            <div class="summary-box">
+                <div class="summary-value">{total_heures}h</div>
+                <div class="summary-label">Heures travaillées</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-value">{total_tours}</div>
+                <div class="summary-label">Nombre de tours</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-value">{total_volume:.1f}</div>
+                <div class="summary-label">Volume total ({unite_volume})</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-value">{total_distance:.1f}</div>
+                <div class="summary-label">Distance (km)</div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p style="font-size: 12px; color: #666;">
+                Ce document constitue un justificatif des prestations réalisées dans le cadre du chantier référencé ci-dessus.
+            </p>
+            
+            <div class="signature-grid">
+                <div class="signature-box">
+                    <p><strong>Le prestataire</strong></p>
+                    <div class="signature-line"></div>
+                    <p style="font-size: 11px;">{config.get('raison_sociale', '')}</p>
+                </div>
+                <div class="signature-box">
+                    <p><strong>Le client</strong></p>
+                    <div class="signature-line"></div>
+                    <p style="font-size: 11px;">{chantier.get('client_nom', '')}</p>
+                </div>
+            </div>
+        </div>
+        
+        <p style="margin-top: 40px; font-size: 11px; color: #888; text-align: center;">
+            Document généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')} - Réf: RECAP-{chantier.get('id', '')}
+        </p>
+    </body>
+    </html>
+    """
+    return html
+
+@api_router.get("/pointages/{pointage_id}/pdf")
+async def get_pointage_pdf(pointage_id: str):
+    """Génère et télécharge le PDF d'un pointage journalier"""
+    pointage = await db.pointages.find_one({"id": pointage_id}, {"_id": 0})
+    if not pointage:
+        raise HTTPException(status_code=404, detail="Pointage non trouvé")
+    
+    chauffeur = await db.chauffeurs.find_one({"id": pointage.get('chauffeur_id')}, {"_id": 0}) or {}
+    chantier = await db.chantiers.find_one({"id": pointage.get('chantier_id')}, {"_id": 0}) or {}
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0}) or {}
+    
+    html = generate_pointage_pdf_html(pointage, chauffeur, chantier, config)
+    
+    pdf = HTML(string=html).write_pdf()
+    
+    filename = f"pointage_{pointage.get('date', '')}_{chauffeur.get('nom', 'chauffeur')}.pdf"
+    
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/chantiers/{chantier_id}/pointages/pdf")
+async def get_chantier_pointages_pdf(chantier_id: str):
+    """Génère et télécharge le PDF récapitulatif des pointages d'un chantier"""
+    chantier = await db.chantiers.find_one({"id": chantier_id}, {"_id": 0})
+    if not chantier:
+        raise HTTPException(status_code=404, detail="Chantier non trouvé")
+    
+    pointages = await db.pointages.find({"chantier_id": chantier_id}, {"_id": 0}).to_list(1000)
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0}) or {}
+    
+    html = generate_recap_pointages_pdf_html(chantier, pointages, config)
+    
+    pdf = HTML(string=html).write_pdf()
+    
+    filename = f"recap_pointages_{chantier.get('reference', chantier_id)}.pdf"
+    
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@api_router.get("/factures/{facture_id}/justificatifs")
+async def get_facture_justificatifs(facture_id: str):
+    """Récupère les justificatifs (pointages) associés à une facture"""
+    facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not facture:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    chantier_id = facture.get('chantier_id')
+    pointages = await db.pointages.find({"chantier_id": chantier_id}, {"_id": 0}).to_list(1000)
+    chantier = await db.chantiers.find_one({"id": chantier_id}, {"_id": 0}) or {}
+    
+    return {
+        "facture_id": facture_id,
+        "facture_numero": facture.get('numero'),
+        "chantier_id": chantier_id,
+        "chantier_reference": chantier.get('reference'),
+        "nombre_pointages": len(pointages),
+        "pointages": pointages,
+        "totaux": {
+            "heures": sum(p.get('heures_travaillees', 0) for p in pointages),
+            "tours": sum(p.get('nombre_tours', len(p.get('tours', []))) for p in pointages),
+            "volume": sum(p.get('total_volume', 0) for p in pointages),
+            "distance": sum(p.get('total_distance', 0) for p in pointages)
+        }
+    }
+
+@api_router.get("/factures/{facture_id}/justificatifs/pdf")
+async def get_facture_justificatifs_pdf(facture_id: str):
+    """Génère le PDF des justificatifs pour une facture"""
+    facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not facture:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    chantier_id = facture.get('chantier_id')
+    chantier = await db.chantiers.find_one({"id": chantier_id}, {"_id": 0})
+    if not chantier:
+        raise HTTPException(status_code=404, detail="Chantier non trouvé")
+    
+    pointages = await db.pointages.find({"chantier_id": chantier_id}, {"_id": 0}).to_list(1000)
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0}) or {}
+    
+    html = generate_recap_pointages_pdf_html(chantier, pointages, config)
+    
+    pdf = HTML(string=html).write_pdf()
+    
+    filename = f"justificatifs_facture_{facture.get('numero', facture_id)}.pdf"
+    
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 # Récapitulatif pointages pour un chantier
 @api_router.get("/chantiers/{chantier_id}/recap")
 async def get_chantier_recap(chantier_id: str):
