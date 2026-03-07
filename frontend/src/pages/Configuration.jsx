@@ -661,6 +661,101 @@ export default function Configuration() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Dialog Compte Bancaire */}
+      <Dialog open={compteDialogOpen} onOpenChange={setCompteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingCompte ? "Modifier le compte bancaire" : "Ajouter un compte bancaire"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Nom de la banque *</Label>
+              <Input
+                value={compteForm.nom_banque}
+                onChange={(e) => setCompteForm({ ...compteForm, nom_banque: e.target.value })}
+                placeholder="Ex: Crédit Agricole"
+                data-testid="compte-nom-input"
+              />
+            </div>
+            <div>
+              <Label>IBAN *</Label>
+              <Input
+                value={compteForm.iban}
+                onChange={(e) => setCompteForm({ ...compteForm, iban: e.target.value })}
+                placeholder="FR76 1234 5678 9012 3456 7890 123"
+                className="font-mono"
+                data-testid="compte-iban-input"
+              />
+            </div>
+            <div>
+              <Label>BIC *</Label>
+              <Input
+                value={compteForm.bic}
+                onChange={(e) => setCompteForm({ ...compteForm, bic: e.target.value })}
+                placeholder="AGRIFRPP"
+                className="font-mono"
+                data-testid="compte-bic-input"
+              />
+            </div>
+            <div className="flex items-center justify-between pt-2">
+              <div>
+                <Label>Compte par défaut</Label>
+                <p className="text-sm text-muted-foreground">
+                  Ce compte sera utilisé par défaut pour les nouvelles factures
+                </p>
+              </div>
+              <Switch
+                checked={compteForm.is_default}
+                onCheckedChange={(checked) => setCompteForm({ ...compteForm, is_default: checked })}
+                data-testid="compte-default-switch"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompteDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleSaveCompte}
+              disabled={savingCompte}
+              className="bg-[#1A4D2E] hover:bg-[#143d24]"
+              data-testid="save-compte-btn"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {savingCompte ? "Enregistrement..." : "Enregistrer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Supprimer Compte */}
+      <AlertDialog open={deleteCompteDialogOpen} onOpenChange={setDeleteCompteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce compte bancaire ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {compteToDelete && (
+                <>
+                  Vous êtes sur le point de supprimer le compte <strong>{compteToDelete.nom_banque}</strong>.
+                  Cette action est irréversible.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCompte}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
