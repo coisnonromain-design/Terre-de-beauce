@@ -347,8 +347,12 @@ class FactureBase(BaseModel):
     client_adresse: Optional[str] = None
     client_siret: Optional[str] = None
     client_tva: Optional[str] = None
+    client_email: Optional[str] = None
     chantier_reference: Optional[str] = None
     chantier_lieu: Optional[str] = None
+    # Lien avec contrat CCPA
+    contrat_id: Optional[str] = None
+    contrat_numero: Optional[str] = None
 
 class FactureCreate(BaseModel):
     chantier_id: str
