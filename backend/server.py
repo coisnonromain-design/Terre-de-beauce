@@ -118,6 +118,21 @@ class EntrepriseConfig(BaseModel):
     bic: Optional[str] = None
     logo_url: Optional[str] = None
 
+# Compte Bancaire
+class CompteBancaireBase(BaseModel):
+    nom_banque: str
+    iban: str
+    bic: str
+    is_default: bool = False
+
+class CompteBancaireCreate(CompteBancaireBase):
+    pass
+
+class CompteBancaire(CompteBancaireBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 class EntrepriseConfigUpdate(BaseModel):
     raison_sociale: Optional[str] = None
     adresse: Optional[str] = None
