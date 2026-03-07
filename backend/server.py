@@ -875,6 +875,83 @@ async def update_taux_horaire_minimum(taux: float):
     updated = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
     return updated
 
+# ============= COMPTES BANCAIRES ROUTES =============
+@api_router.get("/comptes-bancaires", response_model=List[CompteBancaire])
+async def get_comptes_bancaires():
+    """Récupère tous les comptes bancaires"""
+    comptes = await db.comptes_bancaires.find({}, {"_id": 0}).to_list(100)
+    return comptes
+
+@api_router.get("/comptes-bancaires/{compte_id}", response_model=CompteBancaire)
+async def get_compte_bancaire(compte_id: str):
+    """Récupère un compte bancaire par son ID"""
+    compte = await db.comptes_bancaires.find_one({"id": compte_id}, {"_id": 0})
+    if not compte:
+        raise HTTPException(status_code=404, detail="Compte bancaire non trouvé")
+    return compte
+
+@api_router.post("/comptes-bancaires", response_model=CompteBancaire)
+async def create_compte_bancaire(input: CompteBancaireCreate):
+    """Crée un nouveau compte bancaire"""
+    compte = CompteBancaire(**input.model_dump())
+    doc = compte.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    
+    # Si c'est le premier compte ou si is_default est True, gérer le défaut
+    if input.is_default:
+        # Retirer le défaut des autres comptes
+        await db.comptes_bancaires.update_many({}, {"$set": {"is_default": False}})
+    else:
+        # Si c'est le premier compte, le mettre par défaut
+        existing_count = await db.comptes_bancaires.count_documents({})
+        if existing_count == 0:
+            doc['is_default'] = True
+    
+    await db.comptes_bancaires.insert_one(doc)
+    return compte
+
+@api_router.put("/comptes-bancaires/{compte_id}", response_model=CompteBancaire)
+async def update_compte_bancaire(compte_id: str, input: CompteBancaireCreate):
+    """Met à jour un compte bancaire"""
+    existing = await db.comptes_bancaires.find_one({"id": compte_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Compte bancaire non trouvé")
+    
+    update_data = input.model_dump()
+    
+    # Gérer le compte par défaut
+    if input.is_default:
+        await db.comptes_bancaires.update_many(
+            {"id": {"$ne": compte_id}},
+            {"$set": {"is_default": False}}
+        )
+    
+    await db.comptes_bancaires.update_one({"id": compte_id}, {"$set": update_data})
+    updated = await db.comptes_bancaires.find_one({"id": compte_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/comptes-bancaires/{compte_id}")
+async def delete_compte_bancaire(compte_id: str):
+    """Supprime un compte bancaire"""
+    existing = await db.comptes_bancaires.find_one({"id": compte_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Compte bancaire non trouvé")
+    
+    result = await db.comptes_bancaires.delete_one({"id": compte_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Compte bancaire non trouvé")
+    
+    # Si le compte supprimé était par défaut, mettre un autre compte par défaut
+    if existing.get('is_default'):
+        first_compte = await db.comptes_bancaires.find_one({}, {"_id": 0})
+        if first_compte:
+            await db.comptes_bancaires.update_one(
+                {"id": first_compte['id']},
+                {"$set": {"is_default": True}}
+            )
+    
+    return {"message": "Compte bancaire supprimé"}
+
 # ============= TRACTEURS ROUTES =============
 @api_router.get("/tracteurs", response_model=List[Tracteur])
 async def get_tracteurs():
