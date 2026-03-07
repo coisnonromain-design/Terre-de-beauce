@@ -632,6 +632,26 @@ export default function Factures() {
                 </div>
               </div>
 
+              {/* Chantier et Contrat */}
+              <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-lg">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Chantier</p>
+                  <p className="font-medium">{viewingFacture.chantier_reference}</p>
+                  {viewingFacture.chantier_lieu && (
+                    <p className="text-sm text-muted-foreground">{viewingFacture.chantier_lieu}</p>
+                  )}
+                </div>
+                {viewingFacture.contrat_numero && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase">Contrat CCPA</p>
+                    <p className="font-medium font-mono text-[#1A4D2E]">{viewingFacture.contrat_numero}</p>
+                  </div>
+                )}
+              </div>
+                  </Badge>
+                </div>
+              </div>
+
               {/* Référence chantier */}
               <div className="p-3 bg-muted/30 rounded-lg">
                 <p className="text-sm">
