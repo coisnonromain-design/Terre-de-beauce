@@ -142,6 +142,6 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [ ] Géolocalisation des tracteurs
 
 ## Next Tasks
-1. **Logique de facturation complexe** - Implémenter le calcul avec barèmes kilométriques et règle du minima horaire
-2. **Lien contrat-facture** - Relier automatiquement le numéro de contrat au numéro de facture lors de la génération
-3. **Refonte portail chauffeur** - Permettre la saisie des tours (volume + distance) par jour
+1. **Export des données** - Permettre l'export CSV/Excel des factures, pointages, etc.
+2. **Rapports et statistiques** - Dashboard avancé avec graphiques de performance
+3. **Notifications** - Rappels maintenance, échéances factures, etc.
