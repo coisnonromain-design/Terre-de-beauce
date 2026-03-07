@@ -237,27 +237,27 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <KPICard
               title="CA du mois"
-              value={`${(dashboardStats?.ca_mois || 0).toLocaleString('fr-FR')} €`}
+              value={`${caMois.toLocaleString('fr-FR')} €`}
               icon={Euro}
               color="bg-[#1A4D2E] text-white"
             />
             <KPICard
               title="CA de l'année"
-              value={`${(dashboardStats?.ca_annee || 0).toLocaleString('fr-FR')} €`}
+              value={`${caAnnee.toLocaleString('fr-FR')} €`}
               icon={TrendingUp}
               color="bg-[#D9A520] text-white"
             />
             <KPICard
               title="Factures en attente"
-              value={dashboardStats?.factures_en_attente || 0}
+              value={facturesEnAttente}
               subtitle="À relancer"
               icon={FileText}
               color="bg-amber-500 text-white"
             />
             <KPICard
               title="Heures ce mois"
-              value={`${(dashboardStats?.heures_mois || 0).toFixed(0)}h`}
-              subtitle={`${dashboardStats?.tours_mois || 0} tours effectués`}
+              value={`${heuresMois.toFixed(0)}h`}
+              subtitle={`${toursMois} tours effectués`}
               icon={Clock}
               color="bg-blue-500 text-white"
             />
