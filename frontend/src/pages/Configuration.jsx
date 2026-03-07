@@ -444,34 +444,6 @@ export default function Configuration() {
             </div>
           </div>
 
-          <Separator />
-
-          <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-            <CreditCard className="w-4 h-4" />
-            Coordonnées bancaires (pour les factures)
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label>IBAN</Label>
-              <Input
-                value={config.iban || ""}
-                onChange={(e) => setConfig({ ...config, iban: e.target.value })}
-                placeholder="FR76 1234 5678 9012 3456 7890 123"
-                data-testid="iban-input"
-              />
-            </div>
-            <div>
-              <Label>BIC</Label>
-              <Input
-                value={config.bic || ""}
-                onChange={(e) => setConfig({ ...config, bic: e.target.value })}
-                placeholder="BNPAFRPP"
-                data-testid="bic-input"
-              />
-            </div>
-          </div>
-
           <div className="flex justify-end pt-4">
             <Button
               onClick={handleSave}
@@ -483,6 +455,91 @@ export default function Configuration() {
               {saving ? "Enregistrement..." : "Enregistrer"}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Comptes Bancaires */}
+      <Card>
+        <CardHeader className="border-b">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-['Barlow_Condensed'] flex items-center gap-2">
+              <Landmark className="w-5 h-5 text-[#D9A520]" />
+              Comptes Bancaires
+            </CardTitle>
+            <Button
+              onClick={openNewCompteDialog}
+              className="bg-[#1A4D2E] hover:bg-[#143d24]"
+              data-testid="add-compte-btn"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Ajouter un compte
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6">
+          {comptesBancaires.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Landmark className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>Aucun compte bancaire configuré</p>
+              <p className="text-sm mt-1">Ajoutez vos comptes bancaires pour les utiliser sur vos factures</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {comptesBancaires.map((compte) => (
+                <div
+                  key={compte.id}
+                  className={`flex items-center justify-between p-4 rounded-lg border ${
+                    compte.is_default ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"
+                  }`}
+                  data-testid={`compte-bancaire-${compte.id}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-full ${compte.is_default ? "bg-green-100" : "bg-slate-100"}`}>
+                      <Landmark className={`w-5 h-5 ${compte.is_default ? "text-green-600" : "text-slate-600"}`} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{compte.nom_banque}</span>
+                        {compte.is_default && (
+                          <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                            <Star className="w-3 h-3" />
+                            Par défaut
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        <span className="font-mono">{compte.iban}</span>
+                        <span className="mx-2">•</span>
+                        <span className="font-mono">{compte.bic}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditCompteDialog(compte)}
+                      data-testid={`edit-compte-${compte.id}`}
+                    >
+                      <Pen className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => {
+                        setCompteToDelete(compte);
+                        setDeleteCompteDialogOpen(true);
+                      }}
+                      data-testid={`delete-compte-${compte.id}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
