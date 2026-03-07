@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 class DocuSignAPITester:
-    def __init__(self, base_url="https://fleet-dispatch-sys.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://transport-fleet-mgmt-1.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.tests_run = 0
         self.tests_passed = 0
@@ -59,7 +59,7 @@ class DocuSignAPITester:
     def test_docusign_auth_url(self):
         """Test DocuSign auth URL generation"""
         try:
-            redirect_uri = "https://fleet-dispatch-sys.preview.emergentagent.com/docusign-callback"
+            redirect_uri = "https://transport-fleet-mgmt-1.preview.emergentagent.com/docusign-callback"
             response = requests.get(
                 f"{self.base_url}/docusign/auth-url",
                 params={"redirect_uri": redirect_uri},
