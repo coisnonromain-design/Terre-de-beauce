@@ -293,9 +293,9 @@ export default function Dashboard() {
         />
         <StatCard
           icon={HardHat}
-          value={dashboardStats?.chantiers_actifs || 0}
+          value={chantiersActifs}
           label="Chantiers actifs"
-          subValue={`${dashboardStats?.chantiers_termines || 0} terminés`}
+          subValue={`${chantiersTermines} terminés`}
           color="bg-blue-600 text-white"
           testId="stat-chantiers"
         />
