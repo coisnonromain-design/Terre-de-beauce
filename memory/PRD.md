@@ -118,17 +118,20 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [x] Gestion clients avec tarification
 - [x] Gestion chauffeurs avec code accès
 - [x] Gestion chantiers avec tarifs
-- [x] Portail chauffeur (saisie heures/volumes)
+- [x] Portail chauffeur (saisie heures/volumes/tours)
 - [x] Génération factures automatique
 - [x] Configuration barèmes kilométriques
+- [x] Logique de facturation complexe (barèmes + minima horaire)
+- [x] Lien contrat-facture
 
-### P1 (Important) - EN COURS
+### P1 (Important) - TERMINÉ
 - [x] Configuration DocuSign (clés API fournies)
 - [x] Intégration signature électronique factures
 - [x] Ajouter option "gasoil fourni" sur les chantiers
 - [x] Contrats CCPA liés aux chantiers
-- [ ] Implémenter logique de facturation complexe (barèmes + minima horaire)
-- [ ] Lien entre numéro de contrat et numéro de facture
+- [x] Implémenter logique de facturation complexe (barèmes + minima horaire)
+- [x] Lien entre numéro de contrat et numéro de facture
+- [x] Refonte portail chauffeur avec saisie des tours
 
 ### P2 (Souhaitable) - À FAIRE
 - [ ] Export PDF des factures
