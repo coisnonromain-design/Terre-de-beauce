@@ -1245,6 +1245,203 @@ async def delete_facture(facture_id: str):
         raise HTTPException(status_code=404, detail="Facture non trouvée")
     return {"message": "Facture supprimée"}
 
+def generate_facture_html(facture: dict, config: dict) -> str:
+    """Generate HTML content for an invoice"""
+    
+    # Format lignes de facture
+    lignes_html = ""
+    for ligne in facture.get('lignes', []):
+        montant = ligne.get('quantite', 0) * ligne.get('prix_unitaire', 0)
+        lignes_html += f"""
+        <tr>
+            <td style="padding: 10px; border-bottom: 1px solid #eee;">{ligne.get('description', '')}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">{ligne.get('quantite', 0)}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">{ligne.get('prix_unitaire', 0):.2f} €</td>
+            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">{montant:.2f} €</td>
+        </tr>
+        """
+    
+    if not lignes_html:
+        lignes_html = """
+        <tr>
+            <td colspan="4" style="padding: 20px; text-align: center; color: #999;">Aucune ligne de facturation</td>
+        </tr>
+        """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; color: #333; line-height: 1.5; }}
+            .header {{ display: flex; justify-content: space-between; margin-bottom: 40px; }}
+            .company {{ max-width: 45%; }}
+            .company h2 {{ color: #1A4D2E; margin: 0 0 10px 0; font-size: 20px; }}
+            .company p {{ margin: 3px 0; font-size: 12px; color: #666; }}
+            .invoice-title {{ text-align: right; }}
+            .invoice-title h1 {{ color: #1A4D2E; margin: 0; font-size: 28px; }}
+            .invoice-title .number {{ font-size: 16px; color: #666; margin-top: 5px; }}
+            .invoice-title .date {{ font-size: 12px; color: #999; margin-top: 5px; }}
+            .client {{ background: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 30px; }}
+            .client-title {{ font-size: 11px; color: #999; text-transform: uppercase; margin-bottom: 10px; }}
+            .client h3 {{ margin: 0 0 5px 0; color: #333; font-size: 16px; }}
+            .client p {{ margin: 3px 0; font-size: 13px; color: #666; }}
+            .chantier {{ background: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 30px; }}
+            .chantier-title {{ font-size: 11px; color: #1A4D2E; text-transform: uppercase; margin-bottom: 5px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-bottom: 30px; }}
+            th {{ background: #1A4D2E; color: white; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; }}
+            th:nth-child(2), th:nth-child(3), th:nth-child(4) {{ text-align: center; }}
+            th:last-child {{ text-align: right; }}
+            .totals {{ margin-left: auto; width: 300px; }}
+            .total-row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }}
+            .total-row.grand-total {{ border-top: 2px solid #1A4D2E; border-bottom: none; font-size: 18px; font-weight: bold; color: #1A4D2E; padding-top: 15px; }}
+            .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 11px; color: #999; }}
+            .payment {{ background: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 20px; }}
+            .payment-title {{ font-weight: bold; color: #856404; margin-bottom: 5px; }}
+            .payment p {{ margin: 3px 0; font-size: 12px; color: #856404; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="company">
+                <h2>{config.get('raison_sociale', 'TERRE DE BEAUCE LOCATION')}</h2>
+                <p>{config.get('adresse', '')}</p>
+                <p>{config.get('code_postal', '')} {config.get('ville', '')}</p>
+                <p>SIRET: {config.get('siret', '')}</p>
+                <p>TVA: {config.get('tva_intracommunautaire', '')}</p>
+                <p>Email: {config.get('email', '')}</p>
+            </div>
+            <div class="invoice-title">
+                <h1>FACTURE</h1>
+                <div class="number">N° {facture.get('numero', '')}</div>
+                <div class="date">Date d'émission: {facture.get('date_emission', '')}</div>
+            </div>
+        </div>
+        
+        <div class="client">
+            <div class="client-title">Facturer à</div>
+            <h3>{facture.get('client_raison_sociale', '')}</h3>
+            <p>{facture.get('client_adresse', '')}</p>
+            <p>SIRET: {facture.get('client_siret', '')}</p>
+        </div>
+        
+        <div class="chantier">
+            <div class="chantier-title">Référence chantier</div>
+            <strong>{facture.get('chantier_reference', '')}</strong>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Description</th>
+                    <th style="width: 15%;">Quantité</th>
+                    <th style="width: 17%;">Prix unitaire</th>
+                    <th style="width: 18%;">Montant HT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {lignes_html}
+            </tbody>
+        </table>
+        
+        <div class="totals">
+            <div class="total-row">
+                <span>Total HT</span>
+                <span>{facture.get('montant_ht', 0):.2f} €</span>
+            </div>
+            <div class="total-row">
+                <span>TVA (20%)</span>
+                <span>{facture.get('montant_tva', 0):.2f} €</span>
+            </div>
+            <div class="total-row grand-total">
+                <span>Total TTC</span>
+                <span>{facture.get('montant_ttc', 0):.2f} €</span>
+            </div>
+        </div>
+        
+        <div class="payment">
+            <div class="payment-title">Modalités de paiement</div>
+            <p>Paiement à 30 jours à compter de la date d'émission de la facture.</p>
+            {f"<p>IBAN: {config.get('iban', '')}</p>" if config.get('iban') else ""}
+            {f"<p>BIC: {config.get('bic', '')}</p>" if config.get('bic') else ""}
+        </div>
+        
+        <div class="footer">
+            <p>{config.get('raison_sociale', '')} - SIRET: {config.get('siret', '')} - TVA: {config.get('tva_intracommunautaire', '')}</p>
+            <p>En cas de retard de paiement, une pénalité de 3 fois le taux d'intérêt légal sera appliquée, ainsi qu'une indemnité forfaitaire de 40€ pour frais de recouvrement.</p>
+        </div>
+    </body>
+    </html>
+    """
+    return html
+
+@api_router.get("/factures/{facture_id}/pdf")
+async def get_facture_pdf(facture_id: str):
+    """Génère et retourne le PDF de la facture"""
+    # Get facture
+    facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not facture:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    # Get entreprise config
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    if not config:
+        config = {"raison_sociale": "Terre de Beauce"}
+    
+    # Generate HTML
+    html_content = generate_facture_html(facture, config)
+    
+    # Generate PDF
+    try:
+        pdf_bytes = HTML(string=html_content).write_pdf()
+        
+        filename = f"Facture_{facture['numero'].replace('/', '-')}.pdf"
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"inline; filename={filename}"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur génération PDF facture: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la génération du PDF: {str(e)}")
+
+@api_router.get("/factures/{facture_id}/download")
+async def download_facture_pdf(facture_id: str):
+    """Télécharge le PDF de la facture"""
+    # Get facture
+    facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not facture:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    
+    # Get entreprise config
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
+    if not config:
+        config = {"raison_sociale": "Terre de Beauce"}
+    
+    # Generate HTML
+    html_content = generate_facture_html(facture, config)
+    
+    # Generate PDF
+    try:
+        pdf_bytes = HTML(string=html_content).write_pdf()
+        
+        filename = f"Facture_{facture['numero'].replace('/', '-')}.pdf"
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur génération PDF facture: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la génération du PDF: {str(e)}")
+
 # ============= CONTRATS ROUTES =============
 @api_router.get("/contrats", response_model=List[Contrat])
 async def get_contrats(client_id: Optional[str] = None, statut: Optional[ContratStatus] = None):
