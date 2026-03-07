@@ -937,24 +937,23 @@ export default function Contrats() {
                   <Button
                     variant="outline"
                     className="text-red-600 border-red-200 hover:bg-red-50"
-                    onClick={() => window.open(`${API}/contrats-ccpa/${viewingContrat.id}/pdf`, '_blank')}
+                    asChild
                     data-testid="view-pdf-dialog-btn"
                   >
-                    <FileDown className="w-4 h-4 mr-2" />
-                    Voir le PDF
+                    <a href={`${API}/contrats-ccpa/${viewingContrat.id}/pdf`} target="_blank" rel="noopener noreferrer">
+                      <FileDown className="w-4 h-4 mr-2" />
+                      Voir le PDF
+                    </a>
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      const link = document.createElement('a');
-                      link.href = `${API}/contrats-ccpa/${viewingContrat.id}/download`;
-                      link.download = `Contrat_${viewingContrat.numero_contrat}.pdf`;
-                      link.click();
-                    }}
+                    asChild
                     data-testid="download-pdf-btn"
                   >
-                    <Download className="w-4 h-4 mr-2" />
-                    Télécharger
+                    <a href={`${API}/contrats-ccpa/${viewingContrat.id}/download`} download={`Contrat_${viewingContrat.numero_contrat}.pdf`}>
+                      <Download className="w-4 h-4 mr-2" />
+                      Télécharger
+                    </a>
                   </Button>
                   {viewingContrat.statut === "brouillon" && !viewingContrat.docusign_envelope_id && docusignStatus?.authenticated && (
                     <Button
