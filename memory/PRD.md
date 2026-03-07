@@ -89,6 +89,20 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - Photos jointes aux pointages
   - Photos des tickets de frais
 
+### Phase 7 (Multi-Banques) - Mars 2026 ✅ TERMINÉ
+- ✅ **Gestion Multi-Comptes Bancaires**
+  - CRUD complet pour les comptes bancaires (`/api/comptes-bancaires`)
+  - Champs : Nom de la banque, IBAN, BIC, compte par défaut
+  - Section dédiée dans la page Configuration
+- ✅ **Sélection de la banque sur les factures**
+  - Sélecteur de compte bancaire lors de la création de facture
+  - Compte par défaut présélectionné automatiquement
+  - Coordonnées bancaires affichées sur le PDF de la facture
+- ✅ **Classement des factures par banque**
+  - Filtre déroulant par banque sur la page Factures
+  - Colonne "Banque" dans le tableau des factures
+  - Affichage des coordonnées bancaires dans le détail de facture
+
 ## API Endpoints
 
 ### Gestion des entités
