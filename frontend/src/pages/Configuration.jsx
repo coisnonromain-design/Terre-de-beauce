@@ -45,7 +45,7 @@ function BaremeEditor({ bareme, onChange, unite }) {
             className="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-lg p-2"
           >
             <div className="col-span-4 text-sm font-medium">
-              {tranche.km_min.toFixed(1)} - {tranche.km_max.toFixed(1)} km
+              {(tranche.km_min ?? 0).toFixed(1)} - {(tranche.km_max ?? 0).toFixed(1)} km
             </div>
             <div className="col-span-8">
               <div className="relative">
