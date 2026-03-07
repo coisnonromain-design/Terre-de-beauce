@@ -85,9 +85,11 @@ const docusignStatusConfig = {
 export default function Factures() {
   const [factures, setFactures] = useState([]);
   const [chantiers, setChantiers] = useState([]);
+  const [comptesBancaires, setComptesBancaires] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [banqueFilter, setBanqueFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [viewingFacture, setViewingFacture] = useState(null);
@@ -104,6 +106,7 @@ export default function Factures() {
     chantier_id: "",
     date_echeance: "",
     notes: "",
+    compte_bancaire_id: "",
   });
 
   useEffect(() => {
@@ -113,15 +116,23 @@ export default function Factures() {
 
   const fetchData = async () => {
     try {
-      const [facturesRes, chantiersRes, configRes] = await Promise.all([
+      const [facturesRes, chantiersRes, configRes, comptesRes] = await Promise.all([
         axios.get(`${API}/factures`),
         axios.get(`${API}/chantiers`),
         axios.get(`${API}/config/entreprise`),
+        axios.get(`${API}/comptes-bancaires`),
       ]);
       setFactures(facturesRes.data);
       // Filtrer les chantiers terminés ou en cours
       setChantiers(chantiersRes.data.filter(c => c.statut === "en_cours" || c.statut === "termine"));
       setEntrepriseConfig(configRes.data);
+      setComptesBancaires(comptesRes.data);
+      
+      // Définir le compte par défaut dans le formulaire
+      const compteDefault = comptesRes.data.find(c => c.is_default);
+      if (compteDefault) {
+        setForm(prev => ({ ...prev, compte_bancaire_id: compteDefault.id }));
+      }
     } catch (error) {
       toast.error("Erreur lors du chargement des données");
     } finally {
