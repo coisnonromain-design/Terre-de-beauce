@@ -60,34 +60,34 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 
 ### Phase 4 (Export & Dashboard) - Mars 2026 ✅ TERMINÉ
 - ✅ **Export de données CSV/Excel**
-  - Export des factures (filtrable par statut)
-  - Export des pointages (filtrable par chauffeur/chantier)
-  - Export des chantiers (filtrable par statut)
-  - Boutons d'export sur les pages Factures et Pointages
-- ✅ **Nouveau tableau de bord avancé**
-  - KPIs : CA du mois, CA de l'année, factures en attente, heures du mois
-  - Graphique d'évolution du CA (12 derniers mois) avec Recharts
-  - Panneau de notifications (factures en retard, contrats en attente, etc.)
-  - Section "Top Clients" avec classement par CA
-  - Section "Chantiers récents" avec statuts
-  - Statistiques de la flotte et des chauffeurs
-  - Bouton "Actualiser" pour rafraîchir les données
+- ✅ **Nouveau tableau de bord avancé** avec graphiques Recharts
 
 ### Phase 5 (Authentification) - Mars 2026 ✅ TERMINÉ
 - ✅ **Séparation Admin/Chauffeur** - Page d'accueil avec choix
-- ✅ **Authentification Administrateur**
-  - Connexion par email/mot de passe
-  - Token JWT avec expiration 24h
-  - Protection des routes admin
-- ✅ **Gestion multi-administrateurs**
-  - Création de nouveaux comptes admin
-  - Activation/désactivation des comptes
-  - Suppression des comptes
-- ✅ **Authentification Chauffeur**
-  - Page de connexion séparée
-  - Connexion par code d'accès
-  - Protection du portail chauffeur
+- ✅ **Authentification Administrateur** (email/mot de passe, JWT 24h)
+- ✅ **Gestion multi-administrateurs** (création, activation, suppression)
+- ✅ **Authentification Chauffeur** (page séparée, code d'accès)
 - ✅ **Déconnexion** pour admin et chauffeur
+
+### Phase 6 (PDF Pointages & PWA Mobile) - Mars 2026 ✅ TERMINÉ
+- ✅ **Génération PDF des pointages**
+  - PDF journalier par pointage
+  - PDF récapitulatif par chantier
+  - Bouton "Justificatifs (Pointages)" sur les factures
+- ✅ **Application PWA Mobile Chauffeur**
+  - Interface mobile-first responsive
+  - Installable sur écran d'accueil (manifest.json)
+  - Service worker pour cache
+  - Mode hors-ligne avec IndexedDB
+  - Synchronisation automatique au retour en ligne
+  - Indicateur online/offline
+- ✅ **Gestion des notes de frais**
+  - Types : Carburant, Péage, Repas, Hébergement, Autre
+  - Photo de tickets via appareil photo
+  - Validation/refus par admin
+- ✅ **Appareil photo intégré**
+  - Photos jointes aux pointages
+  - Photos des tickets de frais
 
 ## API Endpoints
 
