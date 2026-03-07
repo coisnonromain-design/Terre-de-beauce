@@ -392,10 +392,12 @@ class TestJustificatifs:
         response = requests.get(f"{BASE_URL}/api/factures/{facture_id}/justificatifs")
         assert response.status_code == 200
         data = response.json()
-        assert 'facture' in data
+        assert 'facture_id' in data
+        assert 'facture_numero' in data
         assert 'pointages' in data
-        assert 'chantier' in data
-        print(f"✓ Facture justificatifs retrieved: {len(data['pointages'])} pointages")
+        assert 'chantier_id' in data
+        assert 'totaux' in data
+        print(f"✓ Facture justificatifs retrieved: {len(data['pointages'])} pointages, totaux: {data['totaux']}")
     
     def test_get_facture_justificatifs_pdf(self, facture_id):
         """Test generating PDF of justificatifs for a facture"""
