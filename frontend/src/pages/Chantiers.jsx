@@ -478,6 +478,17 @@ export default function Chantiers() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          asChild
+                          title="Récapitulatif pointages PDF"
+                          data-testid={`pdf-chantier-${chantier.id}`}
+                        >
+                          <a href={`${API}/chantiers/${chantier.id}/pointages/pdf`} download>
+                            <FileDown className="w-4 h-4 text-[#D9A520]" />
+                          </a>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => openEditDialog(chantier)}
                           data-testid={`edit-chantier-${chantier.id}`}
                         >
