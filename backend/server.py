@@ -2264,6 +2264,27 @@ async def generer_facture(input: FactureCreate):
         facture_dict['contrat_numero'] = contrat.get('numero_contrat')
         facture_dict['contrat_id'] = contrat.get('id')
     
+    # Ajouter les informations du compte bancaire
+    if input.compte_bancaire_id:
+        compte_bancaire = await db.comptes_bancaires.find_one({"id": input.compte_bancaire_id}, {"_id": 0})
+        if compte_bancaire:
+            facture_dict['compte_bancaire_id'] = compte_bancaire['id']
+            facture_dict['compte_bancaire_nom'] = compte_bancaire.get('nom_banque')
+            facture_dict['compte_bancaire_iban'] = compte_bancaire.get('iban')
+            facture_dict['compte_bancaire_bic'] = compte_bancaire.get('bic')
+    else:
+        # Utiliser le compte bancaire par défaut
+        compte_default = await db.comptes_bancaires.find_one({"is_default": True}, {"_id": 0})
+        if compte_default:
+            facture_dict['compte_bancaire_id'] = compte_default['id']
+            facture_dict['compte_bancaire_nom'] = compte_default.get('nom_banque')
+            facture_dict['compte_bancaire_iban'] = compte_default.get('iban')
+            facture_dict['compte_bancaire_bic'] = compte_default.get('bic')
+        else:
+            # Fallback sur la config entreprise (ancien système)
+            facture_dict['compte_bancaire_iban'] = config.get('iban')
+            facture_dict['compte_bancaire_bic'] = config.get('bic')
+    
     facture_dict['created_at'] = facture_dict['created_at'].isoformat()
     await db.factures.insert_one(facture_dict)
     
