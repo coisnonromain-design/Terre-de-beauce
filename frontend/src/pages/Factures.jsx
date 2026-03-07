@@ -269,7 +269,15 @@ export default function Factures() {
       f.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (f.client_raison_sociale && f.client_raison_sociale.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === "all" || f.statut === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesBanque = banqueFilter === "all" || f.compte_bancaire_id === banqueFilter;
+    return matchesSearch && matchesStatus && matchesBanque;
+  });
+
+  // Calculer les totaux par banque
+  const totauxParBanque = comptesBancaires.map(compte => {
+    const facturesCompte = factures.filter(f => f.compte_bancaire_id === compte.id);
+    const total = facturesCompte.reduce((sum, f) => sum + (f.montant_ttc || 0), 0);
+    return { ...compte, total, count: facturesCompte.length };
   });
 
   const totalEnAttente = factures
