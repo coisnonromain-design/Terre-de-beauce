@@ -635,8 +635,10 @@ async def create_admin(new_admin: AdminCreate, admin: dict = Depends(get_current
     
     await db.admins.insert_one(admin_dict)
     
-    # Retourner sans le hash
+    # Retourner sans le hash et sans _id (ajouté par MongoDB)
     del admin_dict["password_hash"]
+    if "_id" in admin_dict:
+        del admin_dict["_id"]
     return admin_dict
 
 @api_router.delete("/admin/{admin_id}")
