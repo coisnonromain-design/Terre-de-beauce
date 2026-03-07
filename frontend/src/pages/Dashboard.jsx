@@ -410,7 +410,7 @@ export default function Dashboard() {
                 Chantiers récents
               </CardTitle>
               <Badge variant="secondary">
-                {stats?.chantiers_en_cours || dashboardStats?.chantiers_actifs || 0} en cours
+                {stats?.chantiers_en_cours || chantiersActifs} en cours
               </Badge>
             </div>
           </CardHeader>
