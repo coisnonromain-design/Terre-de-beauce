@@ -2524,7 +2524,7 @@ async def sync_all_docusign_statuses():
 app.include_router(api_router, prefix="/api")
 
 # ============= EXPORT ROUTES =============
-@app.get("/api/export/factures")
+@api_router.get("/export/factures")
 async def export_factures(format: str = Query("csv", enum=["csv", "excel"]), statut: Optional[str] = None):
     """Export des factures en CSV ou Excel"""
     query = {}
@@ -2602,7 +2602,7 @@ async def export_factures(format: str = Query("csv", enum=["csv", "excel"]), sta
             headers={"Content-Disposition": f"attachment; filename=factures_{datetime.now().strftime('%Y%m%d')}.csv"}
         )
 
-@app.get("/api/export/pointages")
+@api_router.get("/export/pointages")
 async def export_pointages(format: str = Query("csv", enum=["csv", "excel"]), chauffeur_id: Optional[str] = None, chantier_id: Optional[str] = None):
     """Export des pointages en CSV ou Excel"""
     query = {}
@@ -2673,7 +2673,7 @@ async def export_pointages(format: str = Query("csv", enum=["csv", "excel"]), ch
             headers={"Content-Disposition": f"attachment; filename=pointages_{datetime.now().strftime('%Y%m%d')}.csv"}
         )
 
-@app.get("/api/export/chantiers")
+@api_router.get("/export/chantiers")
 async def export_chantiers(format: str = Query("csv", enum=["csv", "excel"]), statut: Optional[str] = None):
     """Export des chantiers en CSV ou Excel"""
     query = {}
@@ -2743,7 +2743,7 @@ async def export_chantiers(format: str = Query("csv", enum=["csv", "excel"]), st
         )
 
 # ============= STATISTICS ROUTES =============
-@app.get("/api/stats/dashboard")
+@api_router.get("/stats/dashboard")
 async def get_dashboard_stats():
     """Statistiques pour le dashboard avancé"""
     now = datetime.now()
