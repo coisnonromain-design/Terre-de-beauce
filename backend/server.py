@@ -1131,7 +1131,11 @@ async def get_facture(facture_id: str):
 
 @api_router.post("/factures/generer", response_model=Facture)
 async def generer_facture(input: FactureCreate):
-    """Génère automatiquement une facture à partir du récapitulatif d'un chantier"""
+    """Génère automatiquement une facture avec logique de facturation complexe:
+    - Barèmes kilométriques (solide/liquide × avec/sans gasoil)
+    - Règle du minima horaire
+    - Lien avec le contrat CCPA
+    """
     
     # Récupérer le chantier
     chantier = await db.chantiers.find_one({"id": input.chantier_id}, {"_id": 0})
@@ -1148,58 +1152,189 @@ async def generer_facture(input: FactureCreate):
     if not config:
         config = EntrepriseConfig().model_dump()
     
-    # Calculer les lignes de facture depuis les pointages
+    # Récupérer les barèmes
+    baremes_config = await db.config.find_one({"id": "config_baremes"}, {"_id": 0})
+    
+    # Récupérer le contrat CCPA associé (s'il existe)
+    contrat = await db.contrats_ccpa.find_one({"chantier_id": input.chantier_id}, {"_id": 0})
+    
+    # Récupérer les pointages
     pointages = await db.pointages.find({"chantier_id": input.chantier_id}, {"_id": 0}).to_list(1000)
     
-    total_heures = sum(p.get('heures_travaillees', 0) for p in pointages)
-    total_tonnage = sum(p.get('tonnage_transporte', 0) for p in pointages)
-    nombre_jours = len(set(p.get('date') for p in pointages))
+    if not pointages:
+        raise HTTPException(status_code=400, detail="Aucun pointage pour ce chantier")
+    
+    # Déterminer le type de transport et l'option gasoil
+    transport_type = chantier.get('transport_type', 'solide')
+    avec_gasoil = chantier.get('avec_gasoil', True)
+    
+    # Sélectionner le bon barème
+    bareme_key = f"{transport_type}_{'avec' if avec_gasoil else 'sans'}_gasoil"
+    bareme = baremes_config.get(bareme_key, {}).get('tranches', []) if baremes_config else []
+    taux_horaire_minimum = baremes_config.get('taux_horaire_minimum', 0) if baremes_config else 0
+    
+    # Récupérer le tarif horaire depuis les tarifs du chantier (pour le minima)
+    tarifs = chantier.get('tarifs', [])
+    tarif_horaire = next((t.get('prix_unitaire', 0) for t in tarifs if t.get('methode') == 'heure'), 0)
+    
+    # Si pas de tarif horaire dans le chantier, utiliser le taux minimum configuré
+    if tarif_horaire == 0:
+        tarif_horaire = taux_horaire_minimum
     
     lignes = []
     montant_ht = 0
-    tarifs = chantier.get('tarifs', [])
     
-    for tarif in tarifs:
-        methode = tarif.get('methode')
-        prix = tarif.get('prix_unitaire', 0)
+    # Grouper les pointages par jour
+    pointages_par_jour = {}
+    for p in pointages:
+        date = p.get('date')
+        if date not in pointages_par_jour:
+            pointages_par_jour[date] = []
+        pointages_par_jour[date].append(p)
+    
+    # Traiter chaque jour
+    for date, pointages_jour in pointages_par_jour.items():
+        heures_jour = sum(p.get('heures_travaillees', 0) for p in pointages_jour)
         
-        if methode == 'heure' and total_heures > 0:
-            montant = round(total_heures * prix, 2)
+        # Calculer le montant au volume pour cette journée
+        montant_volume_jour = 0
+        details_volume = []
+        
+        for pointage in pointages_jour:
+            tours = pointage.get('tours', [])
+            for tour in tours:
+                volume = tour.get('volume', 0)
+                distance = tour.get('distance', 0)
+                
+                if volume > 0 and distance > 0 and bareme:
+                    # Trouver le prix dans le barème
+                    prix_unitaire = 0
+                    for tranche in bareme:
+                        km_min = tranche.get('km_min', 0)
+                        km_max = tranche.get('km_max', float('inf'))
+                        if km_min <= distance < km_max:
+                            prix_unitaire = tranche.get('prix_tonne_km', 0)
+                            break
+                    
+                    if prix_unitaire > 0:
+                        montant_tour = volume * prix_unitaire
+                        montant_volume_jour += montant_tour
+                        details_volume.append({
+                            'volume': volume,
+                            'distance': distance,
+                            'prix': prix_unitaire,
+                            'montant': montant_tour
+                        })
+        
+        # Calculer le montant horaire pour la journée (pour comparaison)
+        montant_horaire_jour = heures_jour * tarif_horaire if heures_jour > 0 and tarif_horaire > 0 else 0
+        
+        # Appliquer la règle du minima horaire
+        date_formatted = datetime.strptime(date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        
+        if montant_volume_jour > 0 and montant_horaire_jour > 0:
+            # Comparer les deux modes de facturation
+            if montant_volume_jour >= montant_horaire_jour:
+                # Facturation au volume (plus avantageuse)
+                if details_volume:
+                    unite = "m³" if transport_type == "liquide" else "tonnes"
+                    total_volume = sum(d['volume'] for d in details_volume)
+                    prix_moyen = montant_volume_jour / total_volume if total_volume > 0 else 0
+                    lignes.append(LigneFacture(
+                        description=f"Transport au volume - {date_formatted} ({len(details_volume)} tour(s))",
+                        quantite=round(total_volume, 2),
+                        unite=unite,
+                        prix_unitaire=round(prix_moyen, 2),
+                        montant_ht=round(montant_volume_jour, 2)
+                    ))
+                    montant_ht += montant_volume_jour
+            else:
+                # Facturation à l'heure (minima appliqué)
+                lignes.append(LigneFacture(
+                    description=f"Heures de travail - {date_formatted} (minima horaire appliqué)",
+                    quantite=heures_jour,
+                    unite="heures",
+                    prix_unitaire=tarif_horaire,
+                    montant_ht=round(montant_horaire_jour, 2)
+                ))
+                montant_ht += montant_horaire_jour
+        elif montant_volume_jour > 0:
+            # Seulement du volume
+            if details_volume:
+                unite = "m³" if transport_type == "liquide" else "tonnes"
+                total_volume = sum(d['volume'] for d in details_volume)
+                prix_moyen = montant_volume_jour / total_volume if total_volume > 0 else 0
+                lignes.append(LigneFacture(
+                    description=f"Transport au volume - {date_formatted}",
+                    quantite=round(total_volume, 2),
+                    unite=unite,
+                    prix_unitaire=round(prix_moyen, 2),
+                    montant_ht=round(montant_volume_jour, 2)
+                ))
+                montant_ht += montant_volume_jour
+        elif heures_jour > 0 and tarif_horaire > 0:
+            # Seulement des heures
+            montant = heures_jour * tarif_horaire
             lignes.append(LigneFacture(
-                description=f"Heures de travail - Chantier {chantier.get('reference')}",
-                quantite=total_heures,
+                description=f"Heures de travail - {date_formatted}",
+                quantite=heures_jour,
                 unite="heures",
-                prix_unitaire=prix,
-                montant_ht=montant
+                prix_unitaire=tarif_horaire,
+                montant_ht=round(montant, 2)
             ))
             montant_ht += montant
-        elif methode == 'tonne' and total_tonnage > 0:
-            montant = round(total_tonnage * prix, 2)
-            lignes.append(LigneFacture(
-                description=f"Transport {chantier.get('transport_type', 'solide')} - {chantier.get('lieu')}",
-                quantite=total_tonnage,
-                unite="tonnes",
-                prix_unitaire=prix,
-                montant_ht=montant
-            ))
-            montant_ht += montant
-        elif methode == 'journee' and nombre_jours > 0:
-            montant = round(nombre_jours * prix, 2)
-            lignes.append(LigneFacture(
-                description=f"Forfait journalier - Chantier {chantier.get('reference')}",
-                quantite=nombre_jours,
-                unite="jours",
-                prix_unitaire=prix,
-                montant_ht=montant
-            ))
-            montant_ht += montant
+    
+    # Si toujours pas de lignes, utiliser la facturation simple (tarifs du chantier)
+    if not lignes:
+        total_heures = sum(p.get('heures_travaillees', 0) for p in pointages)
+        total_volume = sum(p.get('total_volume', 0) for p in pointages)
+        nombre_jours = len(pointages_par_jour)
+        
+        for tarif in tarifs:
+            methode = tarif.get('methode')
+            prix = tarif.get('prix_unitaire', 0)
+            
+            if methode == 'heure' and total_heures > 0:
+                montant = round(total_heures * prix, 2)
+                lignes.append(LigneFacture(
+                    description=f"Heures de travail - Chantier {chantier.get('reference')}",
+                    quantite=total_heures,
+                    unite="heures",
+                    prix_unitaire=prix,
+                    montant_ht=montant
+                ))
+                montant_ht += montant
+            elif methode == 'tonne' and total_volume > 0:
+                unite = "m³" if transport_type == "liquide" else "tonnes"
+                montant = round(total_volume * prix, 2)
+                lignes.append(LigneFacture(
+                    description=f"Transport {transport_type} - {chantier.get('lieu')}",
+                    quantite=total_volume,
+                    unite=unite,
+                    prix_unitaire=prix,
+                    montant_ht=montant
+                ))
+                montant_ht += montant
+            elif methode == 'journee' and nombre_jours > 0:
+                montant = round(nombre_jours * prix, 2)
+                lignes.append(LigneFacture(
+                    description=f"Forfait journalier - Chantier {chantier.get('reference')}",
+                    quantite=nombre_jours,
+                    unite="jours",
+                    prix_unitaire=prix,
+                    montant_ht=montant
+                ))
+                montant_ht += montant
     
     if not lignes:
-        raise HTTPException(status_code=400, detail="Aucune donnée à facturer (vérifiez les pointages et tarifs)")
+        raise HTTPException(status_code=400, detail="Aucune donnée à facturer (vérifiez les pointages, tarifs et barèmes)")
     
     taux_tva = 20.0
     montant_tva = round(montant_ht * (taux_tva / 100), 2)
     montant_ttc = round(montant_ht + montant_tva, 2)
+    
+    # Construire l'adresse client
+    client_adresse = f"{client.get('adresse') or ''}, {client.get('code_postal') or ''} {client.get('ville') or ''}".strip(', ')
     
     facture = Facture(
         chantier_id=input.chantier_id,
@@ -1208,25 +1343,33 @@ async def generer_facture(input: FactureCreate):
         date_emission=datetime.now().strftime("%Y-%m-%d"),
         date_echeance=input.date_echeance,
         lignes=[l.model_dump() for l in lignes],
-        montant_ht=montant_ht,
+        montant_ht=round(montant_ht, 2),
         taux_tva=taux_tva,
         montant_tva=montant_tva,
         montant_ttc=montant_ttc,
         statut=FactureStatus.BROUILLON,
         notes=input.notes,
         client_raison_sociale=client.get('raison_sociale'),
-        client_adresse=f"{client.get('adresse')}, {client.get('code_postal')} {client.get('ville')}",
+        client_adresse=client_adresse,
         client_siret=client.get('siret'),
         client_tva=client.get('tva_intracommunautaire'),
+        client_email=client.get('email'),
         chantier_reference=chantier.get('reference'),
         chantier_lieu=chantier.get('lieu')
     )
     
-    doc = facture.model_dump()
-    doc['created_at'] = doc['created_at'].isoformat()
-    await db.factures.insert_one(doc)
+    # Ajouter le lien avec le contrat CCPA
+    facture_dict = facture.model_dump()
+    if contrat:
+        facture_dict['contrat_numero'] = contrat.get('numero_contrat')
+        facture_dict['contrat_id'] = contrat.get('id')
     
-    return facture
+    facture_dict['created_at'] = facture_dict['created_at'].isoformat()
+    await db.factures.insert_one(facture_dict)
+    
+    # Retourner la facture créée
+    created = await db.factures.find_one({"id": facture.id}, {"_id": 0})
+    return created
 
 @api_router.put("/factures/{facture_id}/statut")
 async def update_facture_statut(facture_id: str, statut: FactureStatus):
