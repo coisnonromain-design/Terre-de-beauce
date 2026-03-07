@@ -9,7 +9,8 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - Interface chauffeur pour saisie des heures et volumes
 - Génération automatique de factures
 - Signature électronique (DocuSign) ✅
-- Facturation complexe avec barèmes kilométriques ⏳
+- Facturation complexe avec barèmes kilométriques ✅
+- Export de données et tableau de bord avancé ✅
 
 ### Informations Entreprise
 - Raison sociale: Terre de Beauce
@@ -26,7 +27,7 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 4. **Chauffeur** - Saisit ses heures et volumes via le portail chauffeur
 
 ## Architecture
-- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI
+- **Frontend**: React 19 + Tailwind CSS + Shadcn/UI + Recharts
 - **Backend**: FastAPI (Python)
 - **Database**: MongoDB
 - **Design**: Beauce Green (#1A4D2E) + Harvest Gold (#D9A520)
@@ -50,44 +51,31 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 
 ### Phase 3 (Facturation Complexe) - Mars 2026
 - ✅ **Barèmes kilométriques** - Configuration des 4 barèmes (solide/liquide × avec/sans gasoil)
-  - 20 tranches de 2.5 km jusqu'à 50 km
-  - Interface de configuration modifiable
-  - Taux horaire minimum configurable
 - ✅ **Option "gasoil fourni"** sur les chantiers
-  - Checkbox dans le formulaire de création/modification
-  - Affichage dans la liste et les détails (vert/orange)
-  - Détermine le barème à utiliser pour la facturation
 - ✅ **Contrats CCPA** (Contrat Cadre de Prestations Agricoles)
-  - Page dédiée avec onglet "Contrats" dans la navigation
-  - Création de contrat lié à un chantier
-  - Pré-remplissage automatique des infos client
-  - Champs modifiables : nom, interlocuteur, adresse, email, téléphone, prix, unité
-  - Workflow de statut : Brouillon → Envoyé → Signé
-  - Visualisation du contrat formaté
-  - **Génération et téléchargement PDF** du contrat
 - ✅ **Signature électronique DocuSign pour Contrats et Factures**
-  - Envoi des contrats CCPA pour signature via DocuSign
-  - Envoi des factures pour signature via DocuSign
-  - Suivi du statut DocuSign (Envoyé, Reçu, Signé, Refusé, Annulé)
-  - Synchronisation automatique des statuts
-  - Bouton "Sync DocuSign" pour actualiser tous les documents
 - ✅ **Logique de facturation complexe avec barèmes kilométriques**
-  - Sélection automatique du barème selon type de transport et option gasoil
-  - Calcul du montant par tour (volume × prix selon distance)
-  - Règle du minima horaire : si montant volume < montant horaire → facturation à l'heure
-  - Comparaison journalière pour optimisation
 - ✅ **Lien Contrat-Facture**
-  - Le numéro de contrat CCPA est automatiquement lié à la facture
-  - Affichage du numéro de contrat dans le détail de la facture
-  - Inclus dans le PDF de la facture
-- ✅ **Refonte du portail chauffeur**
-  - Saisie des heures travaillées par jour
-  - Section "Tours / Trajets" pour saisir plusieurs tours par pointage
-  - Chaque tour : volume (tonnes ou m³) + distance (km)
-  - Calcul et affichage des totaux (volume, distance, nombre de tours)
-  - Historique des derniers pointages
+- ✅ **Refonte du portail chauffeur** avec saisie des tours
+
+### Phase 4 (Export & Dashboard) - Mars 2026 ✅ TERMINÉ
+- ✅ **Export de données CSV/Excel**
+  - Export des factures (filtrable par statut)
+  - Export des pointages (filtrable par chauffeur/chantier)
+  - Export des chantiers (filtrable par statut)
+  - Boutons d'export sur les pages Factures et Pointages
+- ✅ **Nouveau tableau de bord avancé**
+  - KPIs : CA du mois, CA de l'année, factures en attente, heures du mois
+  - Graphique d'évolution du CA (12 derniers mois) avec Recharts
+  - Panneau de notifications (factures en retard, contrats en attente, etc.)
+  - Section "Top Clients" avec classement par CA
+  - Section "Chantiers récents" avec statuts
+  - Statistiques de la flotte et des chauffeurs
+  - Bouton "Actualiser" pour rafraîchir les données
 
 ## API Endpoints
+
+### Gestion des entités
 - `GET/POST /api/tracteurs` - Gestion tracteurs
 - `GET/POST /api/equipements` - Gestion équipements
 - `GET/POST /api/chauffeurs` - Gestion chauffeurs
@@ -102,17 +90,25 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - `GET/PUT /api/config/baremes` - Configuration barèmes kilométriques
 - `GET/POST/PUT/DELETE /api/contrats-ccpa` - Gestion contrats CCPA
 - `GET /api/chantiers/{id}/contrat-ccpa` - Contrat CCPA d'un chantier
-- **DocuSign:**
-  - `GET /api/docusign/status` - État de connexion DocuSign
-  - `GET /api/docusign/auth-url` - URL d'authentification OAuth
-  - `POST /api/docusign/send-facture/{id}` - Envoyer facture pour signature
-  - `POST /api/docusign/send-contrat/{id}` - Envoyer contrat pour signature
-  - `POST /api/docusign/sync-status/{type}/{id}` - Synchroniser statut d'un document
-  - `POST /api/docusign/sync-all` - Synchroniser tous les documents
+
+### DocuSign
+- `GET /api/docusign/status` - État de connexion DocuSign
+- `GET /api/docusign/auth-url` - URL d'authentification OAuth
+- `POST /api/docusign/send-facture/{id}` - Envoyer facture pour signature
+- `POST /api/docusign/send-contrat/{id}` - Envoyer contrat pour signature
+- `POST /api/docusign/sync-status/{type}/{id}` - Synchroniser statut d'un document
+- `POST /api/docusign/sync-all` - Synchroniser tous les documents
+
+### Export et Statistiques (Phase 4)
+- `GET /api/export/factures?format=csv|excel&statut=X` - Export factures
+- `GET /api/export/pointages?format=csv|excel&chauffeur_id=X&chantier_id=X` - Export pointages
+- `GET /api/export/chantiers?format=csv|excel&statut=X` - Export chantiers
+- `GET /api/stats/dashboard` - Statistiques avancées du dashboard
+- `GET /api/notifications` - Notifications et alertes
 
 ## Prioritized Backlog
 
-### P0 (Critique) - DONE
+### P0 (Critique) - ✅ TERMINÉ
 - [x] Structure de base ERP
 - [x] Gestion flotte complète
 - [x] Gestion clients avec tarification
@@ -124,7 +120,7 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [x] Logique de facturation complexe (barèmes + minima horaire)
 - [x] Lien contrat-facture
 
-### P1 (Important) - TERMINÉ
+### P1 (Important) - ✅ TERMINÉ
 - [x] Configuration DocuSign (clés API fournies)
 - [x] Intégration signature électronique factures
 - [x] Ajouter option "gasoil fourni" sur les chantiers
@@ -132,16 +128,21 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [x] Implémenter logique de facturation complexe (barèmes + minima horaire)
 - [x] Lien entre numéro de contrat et numéro de facture
 - [x] Refonte portail chauffeur avec saisie des tours
+- [x] Export de données CSV/Excel (factures, pointages)
+- [x] Tableau de bord avancé avec graphiques et KPIs
 
 ### P2 (Souhaitable) - À FAIRE
-- [ ] Export PDF des factures
-- [ ] Notifications (rappels maintenance, échéances)
+- [ ] **Génération PDF pour les Pointages** - Fiche de pointage téléchargeable
 - [ ] Historique des modifications
-- [ ] Rapports et statistiques avancées
 - [ ] Application mobile chauffeur
-- [ ] Géolocalisation des tracteurs
+- [ ] **Géolocalisation des tracteurs** - Suivi GPS et historique des trajets
+- [ ] Intégration comptable (export pour logiciels comptables)
 
 ## Next Tasks
-1. **Export des données** - Permettre l'export CSV/Excel des factures, pointages, etc.
-2. **Rapports et statistiques** - Dashboard avancé avec graphiques de performance
-3. **Notifications** - Rappels maintenance, échéances factures, etc.
+1. **Génération PDF pour les Pointages** - Permettre aux chauffeurs de télécharger leurs fiches de pointage en PDF
+2. **Géolocalisation des tracteurs** - Intégrer un système de suivi GPS pour optimiser les rotations
+
+## Technical Notes
+- Le fichier `server.py` est volumineux (>2900 lignes). Un refactoring en plusieurs routers FastAPI est recommandé pour améliorer la maintenabilité.
+- Les exports utilisent `openpyxl` pour Excel et génèrent des CSV avec séparateur point-virgule (`;`) pour compatibilité Excel français.
+- Le dashboard utilise `recharts` pour les graphiques d'évolution du CA.
