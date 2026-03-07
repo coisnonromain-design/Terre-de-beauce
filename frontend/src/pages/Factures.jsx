@@ -356,6 +356,22 @@ export default function Factures() {
               <SelectItem value="annulee">Annulée</SelectItem>
             </SelectContent>
           </Select>
+          {comptesBancaires.length > 0 && (
+            <Select value={banqueFilter} onValueChange={setBanqueFilter}>
+              <SelectTrigger className="w-44" data-testid="banque-filter">
+                <Landmark className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Banque" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes les banques</SelectItem>
+                {comptesBancaires.map((compte) => (
+                  <SelectItem key={compte.id} value={compte.id}>
+                    {compte.nom_banque}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {docusignStatus?.authenticated && (
             <Button
               variant="outline"
