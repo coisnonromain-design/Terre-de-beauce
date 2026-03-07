@@ -71,8 +71,21 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - Suivi du statut DocuSign (Envoyé, Reçu, Signé, Refusé, Annulé)
   - Synchronisation automatique des statuts
   - Bouton "Sync DocuSign" pour actualiser tous les documents
-- ⏳ Logique de facturation avec minima horaire
-- ⏳ Refonte du portail chauffeur (saisie tours)
+- ✅ **Logique de facturation complexe avec barèmes kilométriques**
+  - Sélection automatique du barème selon type de transport et option gasoil
+  - Calcul du montant par tour (volume × prix selon distance)
+  - Règle du minima horaire : si montant volume < montant horaire → facturation à l'heure
+  - Comparaison journalière pour optimisation
+- ✅ **Lien Contrat-Facture**
+  - Le numéro de contrat CCPA est automatiquement lié à la facture
+  - Affichage du numéro de contrat dans le détail de la facture
+  - Inclus dans le PDF de la facture
+- ✅ **Refonte du portail chauffeur**
+  - Saisie des heures travaillées par jour
+  - Section "Tours / Trajets" pour saisir plusieurs tours par pointage
+  - Chaque tour : volume (tonnes ou m³) + distance (km)
+  - Calcul et affichage des totaux (volume, distance, nombre de tours)
+  - Historique des derniers pointages
 
 ## API Endpoints
 - `GET/POST /api/tracteurs` - Gestion tracteurs
