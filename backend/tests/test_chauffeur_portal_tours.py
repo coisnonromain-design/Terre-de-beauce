@@ -83,9 +83,9 @@ class TestPointagesWithTours:
             "date": today,
             "heures_travaillees": 8,
             "tours": [
-                {"volume": 15.5, "distance": 12.0},
-                {"volume": 18.0, "distance": 15.5},
-                {"volume": 12.5, "distance": 8.0}
+                {"volume": 15.5, "distance_km": 12.0},
+                {"volume": 18.0, "distance_km": 15.5},
+                {"volume": 12.5, "distance_km": 8.0}
             ],
             "commentaire": "TEST_pointage_with_tours"
         }
