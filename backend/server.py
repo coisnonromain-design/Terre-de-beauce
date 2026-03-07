@@ -484,6 +484,67 @@ class ChauffeurSession(BaseModel):
     chauffeur_nom: str
     token: str
 
+# ============= ADMIN AUTH MODELS =============
+class AdminBase(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    email: str
+    nom: str
+    prenom: str
+    role: str = "admin"
+
+class AdminCreate(AdminBase):
+    password: str
+
+class Admin(AdminBase):
+    id: str
+    date_creation: str
+    is_active: bool = True
+
+class AdminLogin(BaseModel):
+    email: str
+    password: str
+
+class AdminSession(BaseModel):
+    admin_id: str
+    email: str
+    nom: str
+    prenom: str
+    token: str
+
+# ============= AUTH HELPER FUNCTIONS =============
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def create_jwt_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRATION_HOURS)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def decode_jwt_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload
+    except JWTError:
+        return None
+
+async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+    
+    payload = decode_jwt_token(credentials.credentials)
+    if not payload or payload.get("type") != "admin":
+        raise HTTPException(status_code=401, detail="Token invalide")
+    
+    admin = await db.admins.find_one({"id": payload.get("admin_id")}, {"_id": 0})
+    if not admin or not admin.get("is_active"):
+        raise HTTPException(status_code=401, detail="Administrateur non trouvé ou désactivé")
+    
+    return admin
+
 # ============= HELPER FUNCTIONS =============
 def serialize_doc(doc: dict) -> dict:
     if '_id' in doc:
