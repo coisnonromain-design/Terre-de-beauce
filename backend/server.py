@@ -569,6 +569,132 @@ def generate_numero_contrat_ccpa():
     now = datetime.now()
     return f"CCPA-{now.year}-{now.month:02d}-{str(uuid.uuid4())[:6].upper()}"
 
+# ============= ADMIN AUTH ROUTES =============
+@api_router.post("/admin/login")
+async def admin_login(login: AdminLogin):
+    """Connexion administrateur"""
+    admin = await db.admins.find_one({"email": login.email.lower()}, {"_id": 0})
+    if not admin:
+        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+    
+    if not verify_password(login.password, admin.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+    
+    if not admin.get("is_active", True):
+        raise HTTPException(status_code=401, detail="Compte désactivé")
+    
+    token = create_jwt_token({
+        "admin_id": admin["id"],
+        "email": admin["email"],
+        "type": "admin"
+    })
+    
+    return AdminSession(
+        admin_id=admin["id"],
+        email=admin["email"],
+        nom=admin["nom"],
+        prenom=admin["prenom"],
+        token=token
+    )
+
+@api_router.get("/admin/me")
+async def get_current_admin_info(admin: dict = Depends(get_current_admin)):
+    """Récupère les infos de l'admin connecté"""
+    return {
+        "id": admin["id"],
+        "email": admin["email"],
+        "nom": admin["nom"],
+        "prenom": admin["prenom"],
+        "role": admin.get("role", "admin")
+    }
+
+@api_router.get("/admin/list")
+async def list_admins(admin: dict = Depends(get_current_admin)):
+    """Liste tous les administrateurs"""
+    admins = await db.admins.find({}, {"_id": 0, "password_hash": 0}).to_list(100)
+    return admins
+
+@api_router.post("/admin/create")
+async def create_admin(new_admin: AdminCreate, admin: dict = Depends(get_current_admin)):
+    """Créer un nouvel administrateur"""
+    # Vérifier si l'email existe déjà
+    existing = await db.admins.find_one({"email": new_admin.email.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Un administrateur avec cet email existe déjà")
+    
+    admin_dict = {
+        "id": str(uuid.uuid4())[:8].upper(),
+        "email": new_admin.email.lower(),
+        "nom": new_admin.nom,
+        "prenom": new_admin.prenom,
+        "role": new_admin.role,
+        "password_hash": hash_password(new_admin.password),
+        "is_active": True,
+        "date_creation": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.admins.insert_one(admin_dict)
+    
+    # Retourner sans le hash
+    del admin_dict["password_hash"]
+    return admin_dict
+
+@api_router.delete("/admin/{admin_id}")
+async def delete_admin(admin_id: str, admin: dict = Depends(get_current_admin)):
+    """Supprimer un administrateur"""
+    if admin_id == admin["id"]:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas supprimer votre propre compte")
+    
+    result = await db.admins.delete_one({"id": admin_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Administrateur non trouvé")
+    
+    return {"message": "Administrateur supprimé"}
+
+@api_router.put("/admin/{admin_id}/toggle-active")
+async def toggle_admin_active(admin_id: str, admin: dict = Depends(get_current_admin)):
+    """Activer/désactiver un administrateur"""
+    if admin_id == admin["id"]:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas désactiver votre propre compte")
+    
+    target_admin = await db.admins.find_one({"id": admin_id}, {"_id": 0})
+    if not target_admin:
+        raise HTTPException(status_code=404, detail="Administrateur non trouvé")
+    
+    new_status = not target_admin.get("is_active", True)
+    await db.admins.update_one({"id": admin_id}, {"$set": {"is_active": new_status}})
+    
+    return {"message": f"Administrateur {'activé' if new_status else 'désactivé'}", "is_active": new_status}
+
+@api_router.post("/admin/init")
+async def init_admin():
+    """Initialise le premier administrateur si aucun n'existe"""
+    count = await db.admins.count_documents({})
+    if count > 0:
+        raise HTTPException(status_code=400, detail="Des administrateurs existent déjà")
+    
+    # Créer l'admin par défaut
+    admin_dict = {
+        "id": str(uuid.uuid4())[:8].upper(),
+        "email": "r.coisnon@terredebeauce.com",
+        "nom": "Coisnon",
+        "prenom": "Romain",
+        "role": "admin",
+        "password_hash": hash_password("Mennessard03"),
+        "is_active": True,
+        "date_creation": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.admins.insert_one(admin_dict)
+    
+    return {"message": "Administrateur initial créé", "email": admin_dict["email"]}
+
+@api_router.get("/admin/check")
+async def check_admin_exists():
+    """Vérifie si des administrateurs existent"""
+    count = await db.admins.count_documents({})
+    return {"has_admins": count > 0}
+
 # ============= ENTREPRISE CONFIG ROUTES =============
 @api_router.get("/config/entreprise", response_model=EntrepriseConfig)
 async def get_entreprise_config():
