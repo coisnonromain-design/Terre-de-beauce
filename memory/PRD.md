@@ -73,6 +73,22 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - Statistiques de la flotte et des chauffeurs
   - Bouton "Actualiser" pour rafraîchir les données
 
+### Phase 5 (Authentification) - Mars 2026 ✅ TERMINÉ
+- ✅ **Séparation Admin/Chauffeur** - Page d'accueil avec choix
+- ✅ **Authentification Administrateur**
+  - Connexion par email/mot de passe
+  - Token JWT avec expiration 24h
+  - Protection des routes admin
+- ✅ **Gestion multi-administrateurs**
+  - Création de nouveaux comptes admin
+  - Activation/désactivation des comptes
+  - Suppression des comptes
+- ✅ **Authentification Chauffeur**
+  - Page de connexion séparée
+  - Connexion par code d'accès
+  - Protection du portail chauffeur
+- ✅ **Déconnexion** pour admin et chauffeur
+
 ## API Endpoints
 
 ### Gestion des entités
