@@ -449,13 +449,11 @@ export default function Configuration() {
                         Tranches de 2,5 km jusqu'à 50 km • Tarifs en € par {info.unite}
                       </p>
                     </div>
-                    {baremes[key] && (
-                      <BaremeEditor
-                        bareme={baremes[key]}
-                        onChange={(newBareme) => updateBareme(key, newBareme)}
-                        unite={info.unite}
-                      />
-                    )}
+                    <BaremeEditor
+                      bareme={baremes[key] || { tranches: [] }}
+                      onChange={(newBareme) => updateBareme(key, newBareme)}
+                      unite={info.unite}
+                    />
                   </TabsContent>
                 ))}
               </Tabs>
