@@ -2521,7 +2521,436 @@ async def sync_all_docusign_statuses():
         raise HTTPException(status_code=500, detail=f"Erreur: {str(e)}")
 
 # Include the router in the main app
-app.include_router(api_router)
+app.include_router(api_router, prefix="/api")
+
+# ============= EXPORT ROUTES =============
+@app.get("/api/export/factures")
+async def export_factures(format: str = Query("csv", enum=["csv", "excel"]), statut: Optional[str] = None):
+    """Export des factures en CSV ou Excel"""
+    query = {}
+    if statut:
+        query["statut"] = statut
+    
+    factures = await db.factures.find(query, {"_id": 0}).sort("date_emission", -1).to_list(1000)
+    
+    if format == "excel":
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Factures"
+        
+        # Header style
+        header_fill = PatternFill(start_color="1A4D2E", end_color="1A4D2E", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        # Headers
+        headers = ["N° Facture", "Date", "Client", "Chantier", "Montant HT", "TVA", "Montant TTC", "Statut", "Contrat CCPA"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+        
+        # Data
+        for row, f in enumerate(factures, 2):
+            ws.cell(row=row, column=1, value=f.get('numero', ''))
+            ws.cell(row=row, column=2, value=f.get('date_emission', ''))
+            ws.cell(row=row, column=3, value=f.get('client_raison_sociale', ''))
+            ws.cell(row=row, column=4, value=f.get('chantier_reference', ''))
+            ws.cell(row=row, column=5, value=f.get('montant_ht', 0))
+            ws.cell(row=row, column=6, value=f.get('montant_tva', 0))
+            ws.cell(row=row, column=7, value=f.get('montant_ttc', 0))
+            ws.cell(row=row, column=8, value=f.get('statut', ''))
+            ws.cell(row=row, column=9, value=f.get('contrat_numero', ''))
+        
+        # Auto-width columns
+        for col in ws.columns:
+            max_length = max(len(str(cell.value or '')) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 50)
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=factures_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        )
+    else:
+        # CSV export
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=';')
+        
+        writer.writerow(["N° Facture", "Date", "Client", "Chantier", "Montant HT", "TVA", "Montant TTC", "Statut", "Contrat CCPA"])
+        
+        for f in factures:
+            writer.writerow([
+                f.get('numero', ''),
+                f.get('date_emission', ''),
+                f.get('client_raison_sociale', ''),
+                f.get('chantier_reference', ''),
+                f.get('montant_ht', 0),
+                f.get('montant_tva', 0),
+                f.get('montant_ttc', 0),
+                f.get('statut', ''),
+                f.get('contrat_numero', '')
+            ])
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode('utf-8-sig')),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=factures_{datetime.now().strftime('%Y%m%d')}.csv"}
+        )
+
+@app.get("/api/export/pointages")
+async def export_pointages(format: str = Query("csv", enum=["csv", "excel"]), chauffeur_id: Optional[str] = None, chantier_id: Optional[str] = None):
+    """Export des pointages en CSV ou Excel"""
+    query = {}
+    if chauffeur_id:
+        query["chauffeur_id"] = chauffeur_id
+    if chantier_id:
+        query["chantier_id"] = chantier_id
+    
+    pointages = await db.pointages.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
+    
+    if format == "excel":
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Pointages"
+        
+        header_fill = PatternFill(start_color="1A4D2E", end_color="1A4D2E", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        headers = ["Date", "Chauffeur", "Chantier", "Heures", "Nb Tours", "Volume Total", "Distance Totale", "Commentaire"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        for row, p in enumerate(pointages, 2):
+            ws.cell(row=row, column=1, value=p.get('date', ''))
+            ws.cell(row=row, column=2, value=p.get('chauffeur_nom', ''))
+            ws.cell(row=row, column=3, value=p.get('chantier_reference', ''))
+            ws.cell(row=row, column=4, value=p.get('heures_travaillees', 0))
+            ws.cell(row=row, column=5, value=p.get('nombre_tours', 0))
+            ws.cell(row=row, column=6, value=p.get('total_volume', 0))
+            ws.cell(row=row, column=7, value=p.get('total_distance', 0))
+            ws.cell(row=row, column=8, value=p.get('commentaire', ''))
+        
+        for col in ws.columns:
+            max_length = max(len(str(cell.value or '')) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 50)
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=pointages_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        )
+    else:
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=';')
+        writer.writerow(["Date", "Chauffeur", "Chantier", "Heures", "Nb Tours", "Volume Total", "Distance Totale", "Commentaire"])
+        
+        for p in pointages:
+            writer.writerow([
+                p.get('date', ''),
+                p.get('chauffeur_nom', ''),
+                p.get('chantier_reference', ''),
+                p.get('heures_travaillees', 0),
+                p.get('nombre_tours', 0),
+                p.get('total_volume', 0),
+                p.get('total_distance', 0),
+                p.get('commentaire', '')
+            ])
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode('utf-8-sig')),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=pointages_{datetime.now().strftime('%Y%m%d')}.csv"}
+        )
+
+@app.get("/api/export/chantiers")
+async def export_chantiers(format: str = Query("csv", enum=["csv", "excel"]), statut: Optional[str] = None):
+    """Export des chantiers en CSV ou Excel"""
+    query = {}
+    if statut:
+        query["statut"] = statut
+    
+    chantiers = await db.chantiers.find(query, {"_id": 0}).sort("date_debut", -1).to_list(1000)
+    
+    if format == "excel":
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Chantiers"
+        
+        header_fill = PatternFill(start_color="1A4D2E", end_color="1A4D2E", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        headers = ["Référence", "Client", "Lieu", "Date Début", "Date Fin", "Type Transport", "Gasoil", "Statut"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        for row, c in enumerate(chantiers, 2):
+            ws.cell(row=row, column=1, value=c.get('reference', ''))
+            ws.cell(row=row, column=2, value=c.get('client_nom', ''))
+            ws.cell(row=row, column=3, value=c.get('lieu', ''))
+            ws.cell(row=row, column=4, value=c.get('date_debut', ''))
+            ws.cell(row=row, column=5, value=c.get('date_fin', ''))
+            ws.cell(row=row, column=6, value=c.get('transport_type', ''))
+            ws.cell(row=row, column=7, value="Oui" if c.get('avec_gasoil', True) else "Non")
+            ws.cell(row=row, column=8, value=c.get('statut', ''))
+        
+        for col in ws.columns:
+            max_length = max(len(str(cell.value or '')) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 50)
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=chantiers_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        )
+    else:
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=';')
+        writer.writerow(["Référence", "Client", "Lieu", "Date Début", "Date Fin", "Type Transport", "Gasoil", "Statut"])
+        
+        for c in chantiers:
+            writer.writerow([
+                c.get('reference', ''),
+                c.get('client_nom', ''),
+                c.get('lieu', ''),
+                c.get('date_debut', ''),
+                c.get('date_fin', ''),
+                c.get('transport_type', ''),
+                "Oui" if c.get('avec_gasoil', True) else "Non",
+                c.get('statut', '')
+            ])
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode('utf-8-sig')),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=chantiers_{datetime.now().strftime('%Y%m%d')}.csv"}
+        )
+
+# ============= STATISTICS ROUTES =============
+@app.get("/api/stats/dashboard")
+async def get_dashboard_stats():
+    """Statistiques pour le dashboard avancé"""
+    now = datetime.now()
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    start_of_year = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Factures stats
+    factures = await db.factures.find({}, {"_id": 0}).to_list(1000)
+    factures_mois = [f for f in factures if f.get('date_emission', '') >= start_of_month.strftime('%Y-%m-%d')]
+    factures_annee = [f for f in factures if f.get('date_emission', '') >= start_of_year.strftime('%Y-%m-%d')]
+    
+    ca_mois = sum(f.get('montant_ttc', 0) for f in factures_mois)
+    ca_annee = sum(f.get('montant_ttc', 0) for f in factures_annee)
+    factures_en_attente = len([f for f in factures if f.get('statut') in ['brouillon', 'emise', 'envoyee']])
+    factures_payees = len([f for f in factures if f.get('statut') == 'payee'])
+    
+    # Chantiers stats
+    chantiers = await db.chantiers.find({}, {"_id": 0}).to_list(1000)
+    chantiers_actifs = len([c for c in chantiers if c.get('statut') == 'en_cours'])
+    chantiers_termines = len([c for c in chantiers if c.get('statut') == 'termine'])
+    
+    # Pointages stats
+    pointages = await db.pointages.find({}, {"_id": 0}).to_list(1000)
+    pointages_mois = [p for p in pointages if p.get('date', '') >= start_of_month.strftime('%Y-%m-%d')]
+    
+    heures_mois = sum(p.get('heures_travaillees', 0) for p in pointages_mois)
+    tours_mois = sum(p.get('nombre_tours', 0) for p in pointages_mois)
+    volume_mois = sum(p.get('total_volume', 0) for p in pointages_mois)
+    
+    # Flotte stats
+    tracteurs = await db.tracteurs.find({}, {"_id": 0}).to_list(100)
+    equipements = await db.equipements.find({}, {"_id": 0}).to_list(100)
+    tracteurs_dispo = len([t for t in tracteurs if t.get('statut') == 'disponible'])
+    equipements_dispo = len([e for e in equipements if e.get('statut') == 'disponible'])
+    
+    # Chauffeurs stats
+    chauffeurs = await db.chauffeurs.find({}, {"_id": 0}).to_list(100)
+    chauffeurs_actifs = len([c for c in chauffeurs if c.get('disponibilite', True)])
+    
+    # Contrats stats
+    contrats = await db.contrats_ccpa.find({}, {"_id": 0}).to_list(1000)
+    contrats_signes = len([c for c in contrats if c.get('statut') == 'signe'])
+    contrats_en_attente = len([c for c in contrats if c.get('statut') in ['brouillon', 'envoye']])
+    
+    # Evolution CA par mois (12 derniers mois)
+    ca_evolution = []
+    for i in range(11, -1, -1):
+        month_date = now - timedelta(days=i*30)
+        month_start = month_date.replace(day=1).strftime('%Y-%m-%d')
+        if month_date.month == 12:
+            month_end = month_date.replace(year=month_date.year+1, month=1, day=1).strftime('%Y-%m-%d')
+        else:
+            month_end = month_date.replace(month=month_date.month+1, day=1).strftime('%Y-%m-%d')
+        
+        month_factures = [f for f in factures if month_start <= f.get('date_emission', '') < month_end]
+        ca_evolution.append({
+            'mois': month_date.strftime('%b %Y'),
+            'montant': sum(f.get('montant_ttc', 0) for f in month_factures)
+        })
+    
+    # Top clients par CA
+    clients_ca = {}
+    for f in factures_annee:
+        client = f.get('client_raison_sociale', 'Inconnu')
+        clients_ca[client] = clients_ca.get(client, 0) + f.get('montant_ttc', 0)
+    
+    top_clients = sorted([{'nom': k, 'ca': v} for k, v in clients_ca.items()], key=lambda x: x['ca'], reverse=True)[:5]
+    
+    return {
+        'facturation': {
+            'ca_mois': round(ca_mois, 2),
+            'ca_annee': round(ca_annee, 2),
+            'factures_en_attente': factures_en_attente,
+            'factures_payees': factures_payees,
+            'total_factures': len(factures)
+        },
+        'chantiers': {
+            'actifs': chantiers_actifs,
+            'termines': chantiers_termines,
+            'total': len(chantiers)
+        },
+        'activite_mois': {
+            'heures': round(heures_mois, 1),
+            'tours': tours_mois,
+            'volume': round(volume_mois, 1),
+            'pointages': len(pointages_mois)
+        },
+        'flotte': {
+            'tracteurs_total': len(tracteurs),
+            'tracteurs_dispo': tracteurs_dispo,
+            'equipements_total': len(equipements),
+            'equipements_dispo': equipements_dispo
+        },
+        'chauffeurs': {
+            'total': len(chauffeurs),
+            'actifs': chauffeurs_actifs
+        },
+        'contrats': {
+            'signes': contrats_signes,
+            'en_attente': contrats_en_attente,
+            'total': len(contrats)
+        },
+        'evolution_ca': ca_evolution,
+        'top_clients': top_clients
+    }
+
+# ============= NOTIFICATIONS ROUTES =============
+@app.get("/api/notifications")
+async def get_notifications():
+    """Récupère les notifications et alertes"""
+    notifications = []
+    now = datetime.now()
+    today = now.strftime('%Y-%m-%d')
+    
+    # Factures en retard de paiement
+    factures = await db.factures.find({"statut": {"$in": ["emise", "envoyee", "signee"]}}, {"_id": 0}).to_list(1000)
+    for f in factures:
+        echeance = f.get('date_echeance', '')
+        if echeance and echeance < today:
+            jours_retard = (now - datetime.strptime(echeance, '%Y-%m-%d')).days
+            notifications.append({
+                'type': 'facture_retard',
+                'priority': 'high' if jours_retard > 30 else 'medium',
+                'title': f"Facture {f.get('numero')} en retard",
+                'message': f"Échéance dépassée de {jours_retard} jours - Client: {f.get('client_raison_sociale')}",
+                'montant': f.get('montant_ttc'),
+                'date': echeance,
+                'link': f"/factures"
+            })
+    
+    # Factures arrivant à échéance (7 jours)
+    for f in factures:
+        echeance = f.get('date_echeance', '')
+        if echeance:
+            jours_avant = (datetime.strptime(echeance, '%Y-%m-%d') - now).days
+            if 0 <= jours_avant <= 7:
+                notifications.append({
+                    'type': 'facture_echeance',
+                    'priority': 'low',
+                    'title': f"Facture {f.get('numero')} bientôt à échéance",
+                    'message': f"Échéance dans {jours_avant} jours - Client: {f.get('client_raison_sociale')}",
+                    'montant': f.get('montant_ttc'),
+                    'date': echeance,
+                    'link': f"/factures"
+                })
+    
+    # Contrats en attente de signature
+    contrats = await db.contrats_ccpa.find({"statut": "envoye"}, {"_id": 0}).to_list(100)
+    for c in contrats:
+        sent_at = c.get('docusign_sent_at', c.get('date_creation', ''))
+        if sent_at:
+            try:
+                sent_date = datetime.fromisoformat(sent_at.replace('Z', '+00:00')) if 'T' in sent_at else datetime.strptime(sent_at, '%Y-%m-%d')
+                jours_attente = (now - sent_date.replace(tzinfo=None)).days
+                if jours_attente > 3:
+                    notifications.append({
+                        'type': 'contrat_attente',
+                        'priority': 'medium',
+                        'title': f"Contrat {c.get('numero_contrat')} en attente",
+                        'message': f"En attente de signature depuis {jours_attente} jours - Client: {c.get('client_nom')}",
+                        'date': sent_at[:10] if sent_at else '',
+                        'link': f"/contrats"
+                    })
+            except:
+                pass
+    
+    # Chantiers sans pointage récent (actifs)
+    chantiers = await db.chantiers.find({"statut": "en_cours"}, {"_id": 0}).to_list(100)
+    for ch in chantiers:
+        last_pointage = await db.pointages.find_one(
+            {"chantier_id": ch.get('id')},
+            {"_id": 0},
+            sort=[("date", -1)]
+        )
+        if last_pointage:
+            last_date = last_pointage.get('date', '')
+            if last_date:
+                jours_sans = (now - datetime.strptime(last_date, '%Y-%m-%d')).days
+                if jours_sans > 7:
+                    notifications.append({
+                        'type': 'chantier_inactif',
+                        'priority': 'low',
+                        'title': f"Chantier {ch.get('reference')} inactif",
+                        'message': f"Aucun pointage depuis {jours_sans} jours",
+                        'date': last_date,
+                        'link': f"/chantiers"
+                    })
+        else:
+            notifications.append({
+                'type': 'chantier_sans_pointage',
+                'priority': 'low',
+                'title': f"Chantier {ch.get('reference')} sans pointage",
+                'message': "Aucun pointage enregistré pour ce chantier actif",
+                'link': f"/chantiers"
+            })
+    
+    # Trier par priorité
+    priority_order = {'high': 0, 'medium': 1, 'low': 2}
+    notifications.sort(key=lambda x: priority_order.get(x.get('priority', 'low'), 2))
+    
+    return {
+        'total': len(notifications),
+        'high': len([n for n in notifications if n.get('priority') == 'high']),
+        'medium': len([n for n in notifications if n.get('priority') == 'medium']),
+        'low': len([n for n in notifications if n.get('priority') == 'low']),
+        'notifications': notifications
+    }
 
 app.add_middleware(
     CORSMiddleware,
