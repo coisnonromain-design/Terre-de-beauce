@@ -758,6 +758,17 @@ export default function Factures() {
                     Télécharger
                   </a>
                 </Button>
+                <Button
+                  variant="outline"
+                  className="text-[#D9A520] border-[#D9A520]/30 hover:bg-[#D9A520]/10"
+                  asChild
+                  data-testid="download-justificatifs-btn"
+                >
+                  <a href={`${API}/factures/${viewingFacture.id}/justificatifs/pdf`} download={`Justificatifs_${viewingFacture.numero}.pdf`}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Justificatifs (Pointages)
+                  </a>
+                </Button>
                 {viewingFacture.statut === "brouillon" && (
                   <Button
                     onClick={() => handleUpdateStatut(viewingFacture.id, "emise")}
