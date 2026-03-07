@@ -118,6 +118,7 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - `POST /api/factures/generer` - Génération automatique
 - `GET/PUT /api/config/entreprise` - Configuration entreprise
 - `GET/PUT /api/config/baremes` - Configuration barèmes kilométriques
+- `GET/POST/PUT/DELETE /api/comptes-bancaires` - Gestion comptes bancaires
 - `GET/POST/PUT/DELETE /api/contrats-ccpa` - Gestion contrats CCPA
 - `GET /api/chantiers/{id}/contrat-ccpa` - Contrat CCPA d'un chantier
 
