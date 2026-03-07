@@ -1,0 +1,111 @@
+{
+  "summary": "Completed testing of Chauffeur Portal with Tours functionality and Facture generation with barèmes kilométriques. Found and fixed 2 bugs: 1) Frontend was sending 'distance' instead of 'distance_km' to backend, 2) Backend facture generation was reading 'distance' instead of 'distance_km' from tours. All 11 backend tests pass (100%). Frontend UI tests pass - chauffeur portal allows adding tours with volume and distance, displays totals correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: POST /api/chauffeur/login with valid code 43FC7D returns chauffeur session",
+    "Backend: POST /api/chauffeur/login with invalid code returns 401",
+    "Backend: POST /api/pointages accepts tours array with volume and distance_km",
+    "Backend: POST /api/pointages calculates total_volume correctly (46.0 from 3 tours)",
+    "Backend: POST /api/pointages calculates total_distance correctly (35.5 km from 3 tours)",
+    "Backend: POST /api/pointages calculates nombre_tours correctly (3)",
+    "Backend: GET /api/config/baremes returns barèmes configuration with all 4 types",
+    "Backend: PUT /api/config/baremes/{type} updates barème tranches",
+    "Backend: POST /api/factures/generer creates facture from pointages",
+    "Backend: POST /api/factures/generer uses barèmes kilométriques for pricing",
+    "Backend: Facture model supports contrat_numero field for CCPA link",
+    "Backend: GET /api/contrats-ccpa returns list of CCPA contracts",
+    "Frontend: Chauffeur Portal login page displays correctly",
+    "Frontend: Login with code EE81FC (Lorenzo GOHIER) works",
+    "Frontend: Chantier selection dropdown works",
+    "Frontend: 'Ajouter un tour' button appears after selecting chantier",
+    "Frontend: Tour inputs (volume, distance) appear when adding tour",
+    "Frontend: Multiple tours can be added",
+    "Frontend: Totals (volume, distance, tours count) display correctly",
+    "Frontend: Submit pointage saves data and shows success toast",
+    "Frontend: Pointage appears in 'Mes derniers pointages' history",
+    "Frontend: Factures page displays facture details with lignes",
+    "Frontend: Factures page shows Contrat CCPA section when contrat_numero exists"
+  ],
+  "bugs_fixed": [
+    {
+      "file": "/app/frontend/src/pages/ChauffeurPortal.jsx",
+      "issue": "Frontend was sending 'distance' field but backend expects 'distance_km'",
+      "fix": "Changed tours mapping to use 'distance_km' instead of 'distance'"
+    },
+    {
+      "file": "/app/backend/server.py",
+      "issue": "Facture generation was reading tour.get('distance', 0) but field is stored as 'distance_km'",
+      "fix": "Changed to tour.get('distance_km', 0) in facture generation logic"
+    }
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_chauffeur_portal_tours.py",
+    "/app/test_reports/pytest/pytest_chauffeur_tours.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/frontend/src/pages/ChauffeurPortal.jsx",
+    "/app/backend/server.py",
+    "/app/backend/tests/test_chauffeur_portal_tours.py"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 tests passed)",
+    "frontend": "100% (All UI tests passed)"
+  },
+  "seed_data_creation": "Used existing chauffeur Lorenzo GOHIER (code: EE81FC) with assigned chantier CH-2026-001",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Chauffeur Portal with Tours functionality is fully working. The portal allows chauffeurs to login with access code, select a chantier, add multiple tours with volume and distance, and submit pointages. The totals are calculated and displayed correctly. Facture generation uses barèmes kilométriques and applies minima horaire rule. Contrat CCPA link is displayed in facture detail when available.",
+  "features_verified": {
+    "chauffeur_portal_login": {
+      "endpoint": "POST /api/chauffeur/login",
+      "status": "WORKING",
+      "test_codes": ["43FC7D (Jean Dupont)", "EE81FC (Lorenzo GOHIER)"]
+    },
+    "chauffeur_portal_form": {
+      "chantier_selection": "WORKING",
+      "date_input": "WORKING",
+      "heures_travaillees_input": "WORKING",
+      "tours_section": "WORKING",
+      "add_tour_button": "WORKING",
+      "tour_volume_input": "WORKING",
+      "tour_distance_input": "WORKING",
+      "totals_display": "WORKING",
+      "submit_pointage": "WORKING"
+    },
+    "pointages_api_with_tours": {
+      "endpoint": "POST /api/pointages",
+      "accepts_tours_array": true,
+      "tour_fields": ["volume", "distance_km"],
+      "calculates_totals": true,
+      "status": "WORKING"
+    },
+    "baremes_kilometriques": {
+      "endpoint": "GET /api/config/baremes",
+      "types": ["solide_avec_gasoil", "solide_sans_gasoil", "liquide_avec_gasoil", "liquide_sans_gasoil"],
+      "taux_horaire_minimum": "configurable",
+      "status": "WORKING"
+    },
+    "facture_generation": {
+      "endpoint": "POST /api/factures/generer",
+      "uses_baremes": true,
+      "applies_minima_horaire": true,
+      "links_contrat_ccpa": true,
+      "status": "WORKING"
+    },
+    "contrat_ccpa_link": {
+      "facture_field": "contrat_numero",
+      "display_in_ui": "Shown in facture detail when available",
+      "status": "WORKING"
+    }
+  }
+}
