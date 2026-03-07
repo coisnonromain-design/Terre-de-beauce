@@ -648,20 +648,6 @@ export default function Factures() {
                   </div>
                 )}
               </div>
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Référence chantier */}
-              <div className="p-3 bg-muted/30 rounded-lg">
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Chantier:</span>{" "}
-                  <span className="font-medium">{viewingFacture.chantier_reference}</span>
-                  {viewingFacture.chantier_lieu && (
-                    <span className="text-muted-foreground"> - {viewingFacture.chantier_lieu}</span>
-                  )}
-                </p>
-              </div>
 
               <Separator />
 
