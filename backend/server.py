@@ -421,11 +421,17 @@ class FactureBase(BaseModel):
     # Lien avec contrat CCPA
     contrat_id: Optional[str] = None
     contrat_numero: Optional[str] = None
+    # Compte bancaire pour le paiement
+    compte_bancaire_id: Optional[str] = None
+    compte_bancaire_nom: Optional[str] = None
+    compte_bancaire_iban: Optional[str] = None
+    compte_bancaire_bic: Optional[str] = None
 
 class FactureCreate(BaseModel):
     chantier_id: str
     date_echeance: str
     notes: Optional[str] = None
+    compte_bancaire_id: Optional[str] = None
 
 class Facture(FactureBase):
     model_config = ConfigDict(extra="ignore")
