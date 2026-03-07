@@ -813,6 +813,30 @@ export default function Factures() {
                 </div>
               </div>
 
+              {/* Compte bancaire */}
+              {viewingFacture.compte_bancaire_nom && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Landmark className="w-5 h-5 text-blue-600" />
+                    <span className="font-semibold text-blue-800">Coordonnées bancaires</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-blue-600">Banque</span>
+                      <p className="font-medium">{viewingFacture.compte_bancaire_nom}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-600">IBAN</span>
+                      <p className="font-mono text-xs">{viewingFacture.compte_bancaire_iban}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-600">BIC</span>
+                      <p className="font-mono">{viewingFacture.compte_bancaire_bic}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex justify-end gap-2 pt-4 border-t flex-wrap">
                 <Button
