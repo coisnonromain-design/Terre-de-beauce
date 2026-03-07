@@ -130,7 +130,7 @@ class TestPointagesWithTours:
             "date": tomorrow,
             "heures_travaillees": 4,
             "tours": [
-                {"volume": 20.0, "distance": 25.0}
+                {"volume": 20.0, "distance_km": 25.0}
             ],
             "commentaire": "TEST_single_tour"
         }
