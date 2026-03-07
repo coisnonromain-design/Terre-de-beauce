@@ -504,11 +504,13 @@ export default function Contrats() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => window.open(`${API}/contrats-ccpa/${contrat.id}/pdf`, '_blank')}
+                            asChild
                             title="Voir le PDF"
                             data-testid={`view-pdf-${contrat.id}`}
                           >
-                            <FileDown className="w-4 h-4 text-red-600" />
+                            <a href={`${API}/contrats-ccpa/${contrat.id}/pdf`} target="_blank" rel="noopener noreferrer">
+                              <FileDown className="w-4 h-4 text-red-600" />
+                            </a>
                           </Button>
                           <Button
                             variant="ghost"
