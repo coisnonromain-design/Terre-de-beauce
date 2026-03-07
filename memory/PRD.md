@@ -44,6 +44,7 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 ### Phase 2 (Facturation) - Janvier 2026
 - ✅ Portail chauffeur (saisie heures/volumes/tours)
 - ✅ Génération factures automatique
+- ✅ **Génération et téléchargement PDF** des factures
 - ✅ Configuration DocuSign avec clés API
 - ✅ Signature électronique des factures
 
