@@ -1,152 +1,121 @@
 <analysis>**original_problem_statement:**
-L'utilisateur a demandé la création d'un ERP complet pour sa société de transport, Terre de Beauce. Le projet a été développé en plusieurs phases, de la gestion de base (flotte, chauffeurs, clients) à des fonctionnalités complexes comme la facturation avancée, la signature électronique (DocuSign), la génération de PDF, l'export de données, un tableau de bord analytique, et une application mobile PWA pour les chauffeurs avec mode hors-ligne et prise de photos pour les notes de frais. La dernière demande majeure était la séparation des accès administrateur et chauffeur avec un système d'authentification complet.
+L'utilisateur a demandé la création d'un ERP complet pour sa société de transport agricole, Terre de Beauce. Le projet a été développé en plusieurs phases pour gérer la flotte, les chauffeurs, les clients, la facturation complexe avec barèmes, la signature électronique (DocuSign), la génération de PDF, un tableau de bord analytique, et une application mobile PWA avec mode hors-ligne pour les chauffeurs. 
+PRODUCT REQUIREMENTS:
+- Phase 1-6 (MVP, Facturation, Auth Admin/Chauffeur, PDF Pointages, PWA Chauffeur) : Terminées.
+- Phase 7 (Déploiement & Domaine) : Terminée. Le domaine personnalisé de l'utilisateur a été configuré avec succès.
+- Phase 8 (Multi-banques) : Terminée. Gestion de multiples comptes bancaires pour l'édition et le tri des factures.
 
-Après la finalisation de toutes les fonctionnalités, l'utilisateur a demandé des conseils pour le déploiement, l'achat et la configuration d'un nom de domaine personnalisé. L'application a maintenant été déployée en production par l'utilisateur.
+**User's preferred language**: French (français). You MUST respond in the user's preferred language only.
 
-**PRODUCT REQUIREMENTS:**
-- **Phase 1-3 (MVP & Facturation):** Terminées.
-- **Phase 4 (Export & Dashboard):** Terminée.
-- **Phase 5 (Authentification Admin/Chauffeur):** Terminée.
-- **Phase 6 (PDF Pointages & PWA Chauffeur):** Terminée.
-- **Phase 7 (Déploiement & Domaine):** Le déploiement est terminé, la connexion du domaine est la prochaine étape.
+**what currently exists?** 
+Une application ERP full-stack (React/FastAPI/MongoDB) en production. Elle inclut la gestion de flotte/chauffeurs/clients, la facturation avec gestion multi-comptes bancaires (nouveau), l'intégration DocuSign (sandbox), la génération de PDF (contrats, factures, pointages), l'export de données, un tableau de bord, et des portails d'authentification distincts. Le portail chauffeur est une PWA mobile-first avec mode hors-ligne.
 
-**User's preferred language**: français
+**Last working item**: 
+    - Last item agent was working: Vérification du déploiement de l'application sur le domaine personnalisé de l'utilisateur. 
+    - Status: COMPLETED
+    - Agent Testing Done: Y
+    - Which testing method agent to use? NA (testing is already done)
+    - User Testing Done: Y
 
-**what currently exists?**
-Une application ERP full-stack (React/FastAPI/MongoDB) entièrement fonctionnelle et déployée en production. Elle inclut la gestion de la flotte, des chauffeurs, des clients et des chantiers ; la facturation complexe avec barèmes ; l'intégration DocuSign (en sandbox) ; la génération de PDF pour les contrats, factures et pointages ; l'export de données (CSV/Excel) ; un tableau de bord avec graphiques ; et des portails d'authentification distincts pour les administrateurs et les chauffeurs. Le portail chauffeur est une PWA (Progressive Web App) mobile-first avec mode hors-ligne et la possibilité de joindre des photos pour les notes de frais.
+**All Pending/In progress Issue list**: 
+  - Aucun problème critique en suspens. L'application est stable et déployée.
 
-**Last working item**:
-- Last item agent was working: Vérification de l'application après son déploiement en production. L'agent a testé avec succès l'URL de production fournie par l'utilisateur en vérifiant la page d'accueil et la page de connexion administrateur.
-- Status: USER VERIFICATION PENDING
-- Agent Testing Done: Y
-- Which testing method agent to use? manual testing by screenshot tool
-- User Testing Done: N
-
-**All Pending/In progress Issue list**:
-  - Il n'y a aucun problème de code en suspens. Les actions restantes concernent la configuration de la plateforme et les futures améliorations.
-
-**In progress Task List**:
-- Task 1: Connecter le domaine personnalisé au site de production (Priority: P0)
-     - Where to resume: L'utilisateur a acheté un domaine chez OVH et a déployé l'application. La prochaine étape consiste pour l'utilisateur à utiliser la fonction Link domain de la plateforme Emergent et à suivre les instructions pour configurer les enregistrements DNS chez OVH, comme expliqué par l'agent.
-     - What will be achieved with this? L'application sera accessible via le nom de domaine personnalisé de l'utilisateur (ex: ).
-     - Status: BLOCKED
-     - Should Test frontend/backend/both after fix? frontend
-     - Blocked on something: Action de l'utilisateur requise pour lier le domaine.
+**In progress Task List**: 
+  - Aucune tâche en cours.
 
 **Upcoming and Future Tasks**
-- **Upcoming Tasks:**
-    - (P1) **Configurer DocuSign pour la production** : L'utilisateur a choisi de déployer sans. Lorsque l'utilisateur sera prêt, il devra fournir les clés API de production pour que l'agent puisse mettre à jour les variables d'environnement.
-- **Future Tasks:**
+    Upcoming Tasks:
+    - (P1) **Configurer DocuSign pour la production** : L'utilisateur est actuellement sur une clé Sandbox. Lorsqu'il sera prêt, il faudra basculer vers les clés API de production et mettre à jour le .
+    
+    Future Tasks:
     - (P2) **Géolocalisation des tracteurs** : Intégrer un suivi GPS pour optimiser les rotations.
-    - (P2) **Activer la refactorisation du backend** : Migrer la logique du fichier monolithique  vers la structure modulaire déjà préparée pour améliorer la maintenabilité.
-    - (P3) **Modification du mot de passe chauffeur** : Permettre aux chauffeurs de changer leur code d'accès depuis leur portail.
+    - (P2) **Activer la refactorisation du backend** : Migrer la logique du fichier monolithique  (>3800 lignes) vers la structure modulaire existante (, , etc.) pour la maintenabilité.
+    - (P3) **Modification du mot de passe chauffeur** : Permettre aux chauffeurs de changer leur code d'accès depuis la PWA.
 
 **Completed work in this session**
-- **Séparation Authentification Admin/Chauffeur :**
-  - Création d'une page d'accueil avec choix de rôle ().
-  - Implémentation d'un système d'authentification JWT pour les administrateurs avec gestion multi-comptes (, ).
-  - Création d'une page de connexion séparée pour les chauffeurs ().
-- **PDF pour les Pointages :**
-  - Ajout des endpoints backend pour générer les PDF des fiches de pointage individuelles et des récapitulatifs par chantier.
-  - Ajout des boutons de téléchargement sur les pages , , et .
-- **Application Mobile PWA pour Chauffeurs :**
-  - Refonte complète du  en une PWA mobile-first.
-  - Implémentation du mode hors-ligne (via ) pour la saisie des pointages.
-  - Ajout de la fonctionnalité appareil photo pour joindre des justificatifs aux notes de frais.
-- **Préparation au Déploiement et Assistance :**
-  - Guidage de l'utilisateur pour l'achat d'un nom de domaine, la compréhension du processus de déploiement et des modifications futures.
-  - Correction des problèmes de pré-déploiement (dépendances manquantes, secrets non sécurisés).
-  - Vérification finale de l'application déployée sur l'URL de production.
+- Bugfix: Page blanche sur  (résolution d'une erreur  causée par des valeurs  dans les barèmes) (DONE)
+- Modélisation et CRUD backend pour  (DONE)
+- UI de gestion multi-banques dans  (DONE)
+- Sélection du compte bancaire à la génération des factures et mise à jour du PDF (DONE)
+- Ajout d'une colonne et d'un filtre Banque dans le tableau des factures (DONE)
+- Validation et vérification de la connexion du domaine personnalisé (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-   - None
+   - Aucun.
 
 **Known issue recurrence from previous fork**
-  - None
+  - Recurrence count: 0
+  - Status: RESOLVED
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Backend:** FastAPI, Pydantic, python-jose (JWT), bcrypt
-- **Frontend:** React, Tailwind CSS, Shadcn/UI, Recharts, PWA (Service Workers, Manifest)
-- **Database:** MongoDB
-- **Intégrations:** DocuSign API (sandbox), WeasyPrint, Openpyxl
-- **Déploiement:** Plateforme Emergent (Preview -> Production)
+- Frontend: React, Tailwind CSS, Shadcn/UI, Recharts, PWA
+- Backend: FastAPI, Pydantic, python-jose (JWT), bcrypt
+- Database: MongoDB
+- PDF Generation: WeasyPrint
+- Architecture: Actuellement Backend monolithique, prêt pour une migration modulaire.
 
 **key DB schema**
-- **Admin**: {email, hashed_password}
-- **NoteDeFrais**: {chauffeur_id, chantier_id, date, montant, type_frais, description, photo_url}
-- **Pointage**: {..., photos: [str]}
+  - Admin: {email, hashed_password}
+  - CompteBancaire: {id, nom_banque, iban, bic, is_default, created_at}
+  - Facture: {..., compte_bancaire_id}
+  - NoteDeFrais: {chauffeur_id, chantier_id, date, montant, type_frais, description, photo_url}
 
 **changes in tech stack**
-- **Backend:** Ajout de  et  pour l'authentification JWT.
-- **Frontend:** Implémentation des technologies PWA (manifest, service worker).
+  - None in this session.
 
-**All files of reference**
-- : Fichier principal, massivement modifié pour l'authentification, les PDF de pointages, et les notes de frais.
-- : Entièrement réécrit pour gérer le nouveau flux d'authentification et les routes protégées.
-- , , : Nouveaux fichiers pour le système d'authentification.
-- : Entièrement réécrit en PWA mobile-first.
-- , : Nouveaux fichiers pour la PWA.
-- : Mis à jour avec .
+**All files of reference** 
+  - : Modifié pour intégrer le CRUD  et la liaison avec les .
+  - : Corrigé (bug ) et enrichi avec le module de gestion des comptes bancaires.
+  - : Ajout des filtres de banque, sélecteur lors de l'édition et colonnes de table.
 
-**Areas that need refactoring**:
-- Le fichier  est un monolithe de plus de 3500 lignes. Une structure modulaire a été préparée mais la migration du code n'a pas été effectuée pour ne pas risquer d'introduire des bugs avant le déploiement. L'activation de cette nouvelle architecture est une tâche technique critique pour la maintenance future.
+**Areas that need refactoring**: 
+Le fichier backend  approche les 3900 lignes. La structure de dossiers pour séparer les routeurs et les modèles existe déjà. Le refactoring a été repoussé intentionnellement pour garantir la stabilité de la production, mais il devient critique (P2).
 
 **key api endpoints**
-- : Connexion administrateur.
-- : CRUD pour les administrateurs.
-- : Connexion chauffeur.
-- : PDF pour un pointage.
-- : PDF récapitulatif des pointages d'un chantier.
-- : CRUD pour les notes de frais.
+  -  (GET, PUT)
+  -  (GET, POST, PUT, DELETE)
+  -  (POST - intègre )
+  -  (PUT)
 
 **Critical Info for New Agent**
-- L'application est **DÉPLOYÉE EN PRODUCTION**. Toute modification doit être effectuée avec une extrême prudence.
-- La priorité absolue est d'assister l'utilisateur dans la connexion de son nom de domaine OVH à l'application déployée.
-- L'intégration DocuSign est toujours en mode **sandbox**.
-- Le backend est un monolithe. Proposer la finalisation de la refactorisation modulaire est une amélioration importante à planifier.
-- Toutes les communications avec l'utilisateur doivent être en **français**.
+- L'application est **EN PRODUCTION** sur un domaine personnalisé.
+- Les endpoints API backend doivent utiliser  et toujours éviter le retour du champ  non-sérialisable de MongoDB.
+- Les communications avec l'utilisateur DOIVENT être exclusivement en français.
+- DocuSign est toujours configuré en mode sandbox.
 
 **documents and test reports created in this job**
--  (mis à jour)
-- 
-- 
-- 
-- 
-- 
+  - 
+  - 
 
-**Last 10 User Messages and any pending HUMAN messages**
-1. **User:** J'ai acheté le nom de domaine.
-2. **User:** Je suis en preview et DocuSign n'est pas connecté.
-3. **Agent:** Propose de déployer maintenant (Option A) et de configurer DocuSign plus tard.
-4. **User:** Je choisis l'option A. Tu peux déployer l'application !
-5. **Agent:** Prépare l'application pour le déploiement en corrigeant des problèmes.
-6. **User:** Est-il possible de modifier l'application après le déploiement ?
-7. **Agent:** Confirme que c'est possible et explique le processus.
-8. **User:** L'application est déployée. Quelle est la suite ?
-9. **User:** Voici l'URL de l'application : 
-10. **Agent:** Teste l'URL de production et confirme que l'application est fonctionnelle.
+**Last 10 User Messages and any pending HUMAN messages** 
+ - je ne trouve les paramètres de mon application deployée (Resolved)
+ - je nai pas accès au paramètres... page blanche apparait." (Resolved - fix bug baremes)
+ - "Avant de redéployer... fonctionnalité que jai oublié... plusieurs banques... (Resolved - implémentation feature)
+ - jai besoin du nom de la banque, de liban et du bic...  (Resolved - specifications utilisées)
+ - lapplication à été deployer et jai relié le nom de domaine directement sur la plateforme emergent (Resolved)
+ - voici le nom de domaine : [domaine-personnalisé] (Resolved - vérifié et validé)
 
 **Project Health Check:**
 - Broken: None
-- Mocked: DocuSign (utilise des clés de sandbox).
+- Mocked: DocuSign API (Sandbox)
 
-**3rd Party Integrations**
-- DocuSign (eSignature) -  - Nécessite une clé API utilisateur (actuellement en sandbox).
-- WeasyPrint (PDF Generation) -  - Pas de clé requise.
-- Openpyxl (Excel Export) -  - Pas de clé requise.
-- , : Pour l'authentification JWT.
+**3rd Party Integrations** 
+- DocuSign (eSignature) - nécessite clé API utilisateur (actuellement en mode test/sandbox)
+- WeasyPrint (PDF Generation) - pas de clé requise
+- Openpyxl (Excel Export) - pas de clé requise
 
 **Testing status**
-- Testing agent used after significant changes: YES
-- Test files created: []
-- Known regressions: []
+  - Testing agent used after significant changes: YES ()
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: []
+  - Known regressions: []
 
 **Credentials to test flow:**
-- **Admin:**  / 
-- **Chauffeur:** Les codes d'accès sont visibles sur la page  de l'application.
+Admin:  / 
+Chauffeur: Visibles dans le tableau de bord Admin > Chauffeurs.
 
 **What agent forgot to execute**
-- Rien. L'agent a consciemment reporté la migration complète du code backend vers une architecture modulaire pour assurer la stabilité avant le déploiement, ce qui était une décision pragmatique.</analysis>
+- Nothing missed. Refactoring  was correctly and consciously postponed to prioritize production stability per user requests.</analysis>
