@@ -611,6 +611,25 @@ def serialize_doc(doc: dict) -> dict:
         doc['updated_at'] = doc['updated_at'].isoformat()
     return doc
 
+async def generate_numero_chantier() -> str:
+    annee = datetime.now().year
+    counter_id = f"chantier_{annee}"
+    result = await db.counters.find_one_and_update(
+        {"_id": counter_id},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True
+    )
+    seq = result["seq"]
+    if annee == 2026 and seq < 3:
+        await db.counters.update_one({"_id": counter_id}, {"$set": {"seq": 3}})
+        seq = 3
+    return f"CH-{seq:04d}-{annee}"
+
+def generate_numero_contrat_from_chantier(ref): return ref.replace("CH-", "CT-", 1)
+def generate_numero_releve_from_chantier(ref): return ref.replace("CH-", "RH-", 1)
+def generate_numero_facture_from_chantier(ref): return ref.replace("CH-", "FC-", 1)
+
 def generate_numero_facture():
     now = datetime.now()
     return f"FAC-{now.year}-{now.month:02d}-{str(uuid.uuid4())[:8].upper()}"
