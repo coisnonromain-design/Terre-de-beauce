@@ -252,7 +252,7 @@ class TarifChantier(BaseModel):
 
 # Chantiers
 class ChantierBase(BaseModel):
-    reference: str
+    reference: str = ""  # Généré automatiquement côté serveur
     client_id: str
     client_nom: Optional[str] = None
     lieu: str
@@ -611,6 +611,44 @@ def serialize_doc(doc: dict) -> dict:
         doc['updated_at'] = doc['updated_at'].isoformat()
     return doc
 
+async def generate_numero_chantier() -> str:
+    """
+    Génère un numéro de chantier séquentiel par année : CH-0003-2026
+    Utilise un compteur atomique en base (collection 'counters').
+    Le compteur 2026 démarre à 3 (deux factures déjà émises).
+    """
+    annee = datetime.now().year
+    counter_id = f"chantier_{annee}"
+    # Initialise à 2 si n'existe pas (incrément donnera 3 au premier appel)
+    result = await db.counters.find_one_and_update(
+        {"_id": counter_id},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True
+    )
+    seq = result["seq"]
+    # Si c'est le premier document 2026, on s'assure de partir à 3
+    if annee == 2026 and seq < 3:
+        await db.counters.update_one(
+            {"_id": counter_id},
+            {"$set": {"seq": 3}}
+        )
+        seq = 3
+    return f"CH-{seq:04d}-{annee}"
+
+def generate_numero_contrat_from_chantier(reference_chantier: str) -> str:
+    """CT-0003-2026 depuis CH-0003-2026"""
+    return reference_chantier.replace("CH-", "CT-", 1)
+
+def generate_numero_releve_from_chantier(reference_chantier: str) -> str:
+    """RH-0003-2026 depuis CH-0003-2026"""
+    return reference_chantier.replace("CH-", "RH-", 1)
+
+def generate_numero_facture_from_chantier(reference_chantier: str) -> str:
+    """FC-0003-2026 depuis CH-0003-2026"""
+    return reference_chantier.replace("CH-", "FC-", 1)
+
+# Conservé pour compatibilité avec l'ancien modèle de contrat (non-CCPA)
 def generate_numero_facture():
     now = datetime.now()
     return f"FAC-{now.year}-{now.month:02d}-{str(uuid.uuid4())[:8].upper()}"
@@ -621,7 +659,7 @@ def generate_reference_contrat(type_transport: str):
     return f"{prefix}-{now.year}-{str(uuid.uuid4())[:6].upper()}"
 
 def generate_numero_contrat_ccpa():
-    """Génère un numéro de contrat CCPA unique"""
+    """Conservé pour compatibilité — préférer generate_numero_contrat_from_chantier"""
     now = datetime.now()
     return f"CCPA-{now.year}-{now.month:02d}-{str(uuid.uuid4())[:6].upper()}"
 
@@ -1145,6 +1183,9 @@ async def get_chantier(chantier_id: str):
 
 @api_router.post("/chantiers", response_model=Chantier)
 async def create_chantier(input: ChantierCreate):
+    # Génération automatique de la référence séquentielle CH-XXXX-YYYY
+    reference = await generate_numero_chantier()
+
     # Enrich affectations with names
     enriched_affectations = []
     for aff in input.affectations:
@@ -1171,6 +1212,7 @@ async def create_chantier(input: ChantierCreate):
         tarifs = [TarifChantier(**t) for t in client.get('tarifs', [])]
     
     chantier_data = input.model_dump()
+    chantier_data['reference'] = reference  # Écrase la référence saisie par l'auto-générée
     chantier_data['affectations'] = enriched_affectations
     chantier_data['client_nom'] = client_nom
     chantier_data['tarifs'] = [t.model_dump() if hasattr(t, 'model_dump') else t for t in tarifs]
@@ -1883,7 +1925,13 @@ async def get_chantier_pointages_pdf(chantier_id: str):
     
     pdf = HTML(string=html).write_pdf()
     
-    filename = f"recap_pointages_{chantier.get('reference', chantier_id)}.pdf"
+    # Nom du fichier avec préfixe RH- dérivé de la référence chantier
+    chantier_ref_rh = chantier.get('reference', chantier_id)
+    if chantier_ref_rh.startswith('CH-'):
+        rh_numero = generate_numero_releve_from_chantier(chantier_ref_rh)
+    else:
+        rh_numero = chantier_ref_rh
+    filename = f"{rh_numero}.pdf"
     
     return Response(
         content=pdf,
@@ -2236,10 +2284,17 @@ async def generer_facture(input: FactureCreate):
     # Construire l'adresse client
     client_adresse = f"{client.get('adresse') or ''}, {client.get('code_postal') or ''} {client.get('ville') or ''}".strip(', ')
     
+    # Numéro de facture dérivé de la référence chantier : CH-0003-2026 → FC-0003-2026
+    chantier_ref = chantier.get('reference', '')
+    if chantier_ref.startswith('CH-'):
+        numero_facture = generate_numero_facture_from_chantier(chantier_ref)
+    else:
+        numero_facture = generate_numero_facture()  # fallback anciens chantiers
+
     facture = Facture(
         chantier_id=input.chantier_id,
         client_id=client['id'],
-        numero=generate_numero_facture(),
+        numero=numero_facture,
         date_emission=datetime.now().strftime("%Y-%m-%d"),
         date_echeance=input.date_echeance,
         lignes=[l.model_dump() for l in lignes],
@@ -2652,9 +2707,16 @@ async def create_contrat_ccpa(input: ContratCCPACreate):
         elif methode == 'journee':
             unite_facturation = "journée effectuée"
     
+    # Numéro de contrat dérivé de la référence chantier : CH-0003-2026 → CT-0003-2026
+    chantier_reference = chantier.get('reference', '')
+    if chantier_reference.startswith('CH-'):
+        numero_contrat = generate_numero_contrat_from_chantier(chantier_reference)
+    else:
+        numero_contrat = generate_numero_contrat_ccpa()  # fallback anciens chantiers
+
     # Créer le contrat CCPA pré-rempli
     contrat = ContratCCPA(
-        numero_contrat=generate_numero_contrat_ccpa(),
+        numero_contrat=numero_contrat,
         chantier_id=input.chantier_id,
         client_id=client['id'],
         client_nom=client.get('raison_sociale') or '',
