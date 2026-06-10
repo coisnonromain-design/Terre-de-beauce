@@ -2842,8 +2842,77 @@ class DocuSignSendRequest(BaseModel):
     signer_email: str
     signer_name: str
 
-# Store DocuSign access token in memory (in production, use database or Redis)
-docusign_tokens = {}
+# DocuSign tokens are persisted in MongoDB (collection: docusign_tokens)
+# so they survive backend restarts/redeploys, with automatic refresh.
+DOCUSIGN_TOKEN_DOC_ID = "docusign_oauth"
+
+def _docusign_basic_auth_header():
+    auth_string = base64.b64encode(
+        f"{DOCUSIGN_INTEGRATION_KEY}:{DOCUSIGN_SECRET_KEY}".encode()
+    ).decode()
+    return {
+        "Authorization": f"Basic {auth_string}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+async def save_docusign_tokens(token_data: dict) -> dict:
+    """Persist DocuSign OAuth tokens in MongoDB."""
+    now = datetime.now(timezone.utc)
+    expires_in = int(token_data.get("expires_in", 28800))
+    doc = {
+        "id": DOCUSIGN_TOKEN_DOC_ID,
+        "access_token": token_data.get("access_token"),
+        "refresh_token": token_data.get("refresh_token"),
+        "token_type": token_data.get("token_type", "Bearer"),
+        "scope": token_data.get("scope"),
+        "expires_at": (now + timedelta(seconds=expires_in)).isoformat(),
+        "updated_at": now.isoformat(),
+    }
+    await db.docusign_tokens.update_one(
+        {"id": DOCUSIGN_TOKEN_DOC_ID}, {"$set": doc}, upsert=True
+    )
+    return doc
+
+async def _refresh_docusign_token(refresh_token: str):
+    """Exchange a refresh_token for a new access_token. Returns saved doc or None."""
+    import requests
+    token_url = f"https://{DOCUSIGN_AUTH_SERVER}/oauth/token"
+    try:
+        response = requests.post(
+            token_url,
+            headers=_docusign_basic_auth_header(),
+            data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+            timeout=30,
+        )
+    except Exception as e:
+        logger.error(f"DocuSign refresh error: {str(e)}")
+        return None
+    if response.status_code != 200:
+        logger.error(f"DocuSign refresh failed: {response.status_code} {response.text}")
+        return None
+    return await save_docusign_tokens(response.json())
+
+async def get_docusign_access_token():
+    """Return a valid DocuSign access token, refreshing if expired. None if not connected."""
+    doc = await db.docusign_tokens.find_one({"id": DOCUSIGN_TOKEN_DOC_ID}, {"_id": 0})
+    if not doc or not doc.get("access_token"):
+        return None
+    now = datetime.now(timezone.utc)
+    exp_dt = None
+    if doc.get("expires_at"):
+        try:
+            exp_dt = datetime.fromisoformat(doc["expires_at"])
+        except (ValueError, TypeError):
+            exp_dt = None
+    # Valid with a 60s safety buffer
+    if exp_dt and exp_dt > now + timedelta(seconds=60):
+        return doc["access_token"]
+    # Expired -> try refresh
+    if doc.get("refresh_token"):
+        refreshed = await _refresh_docusign_token(doc["refresh_token"])
+        if refreshed:
+            return refreshed["access_token"]
+    return None
 
 @api_router.get("/docusign/auth-url")
 async def get_docusign_auth_url(redirect_uri: str):
@@ -2854,7 +2923,7 @@ async def get_docusign_auth_url(redirect_uri: str):
     auth_url = (
         f"https://{DOCUSIGN_AUTH_SERVER}/oauth/auth"
         f"?response_type=code"
-        f"&scope=signature"
+        f"&scope=signature%20extended"
         f"&client_id={DOCUSIGN_INTEGRATION_KEY}"
         f"&redirect_uri={redirect_uri}"
     )
@@ -2888,9 +2957,7 @@ async def docusign_oauth_callback(request: DocuSignOAuthRequest):
         raise HTTPException(status_code=400, detail=f"Erreur DocuSign: {response.text}")
     
     token_data = response.json()
-    docusign_tokens["access_token"] = token_data.get("access_token")
-    docusign_tokens["refresh_token"] = token_data.get("refresh_token")
-    docusign_tokens["expires_at"] = datetime.now(timezone.utc).timestamp() + token_data.get("expires_in", 3600)
+    await save_docusign_tokens(token_data)
     
     return {"success": True, "message": "DocuSign connecté avec succès"}
 
@@ -2898,13 +2965,8 @@ async def docusign_oauth_callback(request: DocuSignOAuthRequest):
 async def get_docusign_status():
     """Check if DocuSign is configured and authenticated"""
     is_configured = bool(DOCUSIGN_INTEGRATION_KEY and DOCUSIGN_SECRET_KEY)
-    is_authenticated = bool(docusign_tokens.get("access_token"))
-    
-    if is_authenticated:
-        # Check if token is expired
-        expires_at = docusign_tokens.get("expires_at", 0)
-        if datetime.now(timezone.utc).timestamp() > expires_at:
-            is_authenticated = False
+    access_token = await get_docusign_access_token()
+    is_authenticated = bool(access_token)
     
     return {
         "configured": is_configured,
@@ -2916,7 +2978,8 @@ async def get_docusign_status():
 async def send_facture_for_signature(facture_id: str, signer_email: str, signer_name: str):
     """Send a facture for electronic signature"""
     
-    if not docusign_tokens.get("access_token"):
+    access_token = await get_docusign_access_token()
+    if not access_token:
         raise HTTPException(status_code=401, detail="DocuSign non authentifié. Veuillez vous connecter d'abord.")
     
     # Get facture
@@ -2936,7 +2999,7 @@ async def send_facture_for_signature(facture_id: str, signer_email: str, signer_
         # Create API client
         api_client = ApiClient()
         api_client.host = DOCUSIGN_BASE_URL
-        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        api_client.set_default_header("Authorization", f"Bearer {access_token}")
         
         # Create envelope
         envelope_definition = EnvelopeDefinition(
@@ -3000,13 +3063,14 @@ async def send_facture_for_signature(facture_id: str, signer_email: str, signer_
 async def get_envelope_status(envelope_id: str):
     """Get the status of a DocuSign envelope"""
     
-    if not docusign_tokens.get("access_token"):
+    access_token = await get_docusign_access_token()
+    if not access_token:
         raise HTTPException(status_code=401, detail="DocuSign non authentifié")
     
     try:
         api_client = ApiClient()
         api_client.host = DOCUSIGN_BASE_URL
-        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        api_client.set_default_header("Authorization", f"Bearer {access_token}")
         
         envelopes_api = EnvelopesApi(api_client)
         envelope = envelopes_api.get_envelope(DOCUSIGN_ACCOUNT_ID, envelope_id)
@@ -3248,7 +3312,8 @@ def generate_contrat_ccpa_html(contrat: dict, config: dict) -> str:
 async def send_contrat_for_signature(contrat_id: str, signer_email: str, signer_name: str):
     """Send a CCPA contract for electronic signature"""
     
-    if not docusign_tokens.get("access_token"):
+    access_token = await get_docusign_access_token()
+    if not access_token:
         raise HTTPException(status_code=401, detail="DocuSign non authentifié. Veuillez vous connecter d'abord.")
     
     # Get contrat
@@ -3268,7 +3333,7 @@ async def send_contrat_for_signature(contrat_id: str, signer_email: str, signer_
         # Create API client
         api_client = ApiClient()
         api_client.host = DOCUSIGN_BASE_URL
-        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        api_client.set_default_header("Authorization", f"Bearer {access_token}")
         
         # Create envelope
         envelope_definition = EnvelopeDefinition(
@@ -3339,7 +3404,8 @@ async def sync_docusign_status(document_type: str, document_id: str):
     if document_type not in ["facture", "contrat"]:
         raise HTTPException(status_code=400, detail="Type de document invalide. Utilisez 'facture' ou 'contrat'")
     
-    if not docusign_tokens.get("access_token"):
+    access_token = await get_docusign_access_token()
+    if not access_token:
         raise HTTPException(status_code=401, detail="DocuSign non authentifié")
     
     # Get document
@@ -3360,7 +3426,7 @@ async def sync_docusign_status(document_type: str, document_id: str):
     try:
         api_client = ApiClient()
         api_client.host = DOCUSIGN_BASE_URL
-        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        api_client.set_default_header("Authorization", f"Bearer {access_token}")
         
         envelopes_api = EnvelopesApi(api_client)
         envelope = envelopes_api.get_envelope(DOCUSIGN_ACCOUNT_ID, envelope_id)
@@ -3409,7 +3475,8 @@ async def sync_docusign_status(document_type: str, document_id: str):
 async def sync_all_docusign_statuses():
     """Synchronize DocuSign status for all pending documents"""
     
-    if not docusign_tokens.get("access_token"):
+    access_token = await get_docusign_access_token()
+    if not access_token:
         raise HTTPException(status_code=401, detail="DocuSign non authentifié")
     
     results = {"factures": [], "contrats": [], "errors": []}
@@ -3417,7 +3484,7 @@ async def sync_all_docusign_statuses():
     try:
         api_client = ApiClient()
         api_client.host = DOCUSIGN_BASE_URL
-        api_client.set_default_header("Authorization", f"Bearer {docusign_tokens['access_token']}")
+        api_client.set_default_header("Authorization", f"Bearer {access_token}")
         envelopes_api = EnvelopesApi(api_client)
         
         # Sync factures
