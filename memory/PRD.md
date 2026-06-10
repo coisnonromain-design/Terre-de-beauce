@@ -134,6 +134,15 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - Section « Mes factures » dans le portail client (consultation + téléchargement PDF)
   - Endpoint `GET /api/client/{client_id}/factures` (exclut les brouillons)
 
+### Phase 10 (Espace Client à 4 onglets) - Décembre 2025 ✅ TERMINÉ
+- ✅ **Portail client réorganisé en 4 onglets** : 🏗️ Mes chantiers · 📄 Mes contrats · 📋 Mes relevés · 🧾 Mes factures (l'espace documentaire générique est retiré côté client)
+- ✅ **Mes chantiers** : chantiers du client groupés par statut (Programmés / En cours / Terminés), lecture seule
+- ✅ **Mes contrats** : contrats CCPA en 3 sections (En attente de signature / Signés / À visualiser), **signature intégrée DocuSign**
+- ✅ **Mes relevés** : relevés de pointages (RH-) par chantier, consultation/téléchargement (section À visualiser)
+- ✅ **Mes factures** : factures en 3 sections, **signature intégrée DocuSign** (emise/envoyee → à signer, signee → signés, payee → à visualiser)
+- ✅ Helpers de **signature intégrée réutilisables** (`docusign_embedded_view`, `docusign_fetch_signed_pdf`) + stockage des PDF signés (object storage) + téléchargement `?signed=true`
+- ✅ Endpoints `GET /api/client/{id}/{chantiers|contrats|releves|factures}` et signature `POST /api/{contrats-ccpa|factures}/{id}/sign-embedded` + `/sign-sync`
+
 ## API Endpoints
 
 ### Gestion des entités
