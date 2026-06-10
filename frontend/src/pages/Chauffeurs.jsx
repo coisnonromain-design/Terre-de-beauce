@@ -14,11 +14,42 @@ import {
   X,
   Key,
   Copy,
+  Folder,
+  Clock,
+  CheckCircle,
+  FileText,
+  Download,
+  ExternalLink,
+  Plus,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +89,12 @@ export default function Chauffeurs() {
   const [editingChauffeur, setEditingChauffeur] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [chauffeurToDelete, setChauffeurToDelete] = useState(null);
+  const [docsDialogOpen, setDocsDialogOpen] = useState(false);
+  const [selectedChauffeurDocs, setSelectedChauffeurDocs] = useState(null);
+  const [docsChauffeur, setDocsChauffeur] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [newDocForm, setNewDocForm] = useState({ nom: "", type_document: "contrat_travail", notes: "" });
+  const [addingDoc, setAddingDoc] = useState(false);
 
   const [form, setForm] = useState({
     nom: "",
@@ -151,6 +188,62 @@ export default function Chauffeurs() {
       c.prenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.telephone.includes(searchTerm)
   );
+
+  const openDocsDialog = async (chauffeur) => {
+    setSelectedChauffeurDocs(chauffeur);
+    setDocsDialogOpen(true);
+    setDocsLoading(true);
+    try {
+      const token = localStorage.getItem("admin_token");
+      const res = await axios.get(`${API}/admin/chauffeurs/${chauffeur.id}/documents`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDocsChauffeur(res.data);
+    } catch (error) {
+      toast.error("Erreur lors du chargement des documents");
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  const handleAddDoc = async () => {
+    if (!newDocForm.nom) { toast.error("Veuillez saisir un nom de document"); return; }
+    setAddingDoc(true);
+    try {
+      const token = localStorage.getItem("admin_token");
+      await axios.post(`${API}/admin/documents-chauffeur`, {
+        chauffeur_id: selectedChauffeurDocs.id,
+        ...newDocForm
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success("Document ajouté");
+      setNewDocForm({ nom: "", type_document: "contrat_travail", notes: "" });
+      // Recharger
+      const res = await axios.get(`${API}/admin/chauffeurs/${selectedChauffeurDocs.id}/documents`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDocsChauffeur(res.data);
+    } catch (error) {
+      toast.error("Erreur lors de l'ajout");
+    } finally {
+      setAddingDoc(false);
+    }
+  };
+
+  const handleUpdateDocStatut = async (docId, statut) => {
+    try {
+      const token = localStorage.getItem("admin_token");
+      await axios.put(`${API}/admin/documents-chauffeur/${docId}?statut=${statut}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Statut mis à jour");
+      const res = await axios.get(`${API}/admin/chauffeurs/${selectedChauffeurDocs.id}/documents`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDocsChauffeur(res.data);
+    } catch (error) {
+      toast.error("Erreur lors de la mise à jour");
+    }
+  };
 
   if (loading) {
     return (
@@ -299,6 +392,14 @@ export default function Chauffeurs() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Espace documents"
+                          onClick={() => openDocsDialog(chauffeur)}
+                        >
+                          <Folder className="w-4 h-4 text-blue-500" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -460,6 +561,166 @@ export default function Chauffeurs() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    {/* Dialog Espace Documents Chauffeur */}
+      <Dialog open={docsDialogOpen} onOpenChange={setDocsDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-['Barlow_Condensed'] text-2xl flex items-center gap-2">
+              <Folder className="w-5 h-5 text-blue-500" />
+              Documents — {selectedChauffeurDocs?.prenom} {selectedChauffeurDocs?.nom}
+            </DialogTitle>
+          </DialogHeader>
+
+          <Tabs defaultValue="attente">
+            <TabsList>
+              <TabsTrigger value="attente">
+                <Clock className="w-4 h-4 mr-2" />
+                En attente ({docsChauffeur.filter(d => d.statut === "en_attente").length})
+              </TabsTrigger>
+              <TabsTrigger value="signes">
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Signés ({docsChauffeur.filter(d => d.statut === "signe").length})
+              </TabsTrigger>
+              <TabsTrigger value="ajouter">
+                <Plus className="w-4 h-4 mr-2" />
+                Ajouter
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="attente" className="mt-4">
+              {docsLoading ? (
+                <p className="text-center text-muted-foreground py-6">Chargement...</p>
+              ) : docsChauffeur.filter(d => d.statut === "en_attente").length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle className="w-10 h-10 mx-auto mb-2 text-green-400" />
+                  <p>Aucun document en attente</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Document</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Envoyé le</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {docsChauffeur.filter(d => d.statut === "en_attente").map((doc) => (
+                      <TableRow key={doc.id}>
+                        <TableCell className="font-medium">{doc.nom}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {doc.type_document === "contrat_travail" ? "Contrat" :
+                             doc.type_document === "fiche_paie" ? "Fiche de paie" :
+                             doc.type_document === "commissionnement" ? "Commissionnement" : "Autre"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="outline"
+                            onClick={() => handleUpdateDocStatut(doc.id, "signe")}
+                            className="text-green-600 border-green-300 hover:bg-green-50"
+                          >
+                            <CheckCircle className="w-3 h-3 mr-1" /> Marquer signé
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+
+            <TabsContent value="signes" className="mt-4">
+              {docsChauffeur.filter(d => d.statut === "signe").length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                  <p>Aucun document signé</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Document</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Signé le</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {docsChauffeur.filter(d => d.statut === "signe").map((doc) => (
+                      <TableRow key={doc.id}>
+                        <TableCell className="font-medium">{doc.nom}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {doc.type_document === "contrat_travail" ? "Contrat" :
+                             doc.type_document === "fiche_paie" ? "Fiche de paie" :
+                             doc.type_document === "commissionnement" ? "Commissionnement" : "Autre"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {doc.signed_at ? new Date(doc.signed_at).toLocaleDateString("fr-FR") : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="outline">
+                            <Download className="w-3 h-3 mr-1" /> Télécharger
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+
+            <TabsContent value="ajouter" className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Label>Nom du document *</Label>
+                <input
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                  placeholder="ex: Contrat de travail CDI"
+                  value={newDocForm.nom}
+                  onChange={(e) => setNewDocForm({ ...newDocForm, nom: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Type de document</Label>
+                <Select value={newDocForm.type_document} onValueChange={(v) => setNewDocForm({ ...newDocForm, type_document: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contrat_travail">Contrat de travail</SelectItem>
+                    <SelectItem value="fiche_paie">Fiche de paie</SelectItem>
+                    <SelectItem value="commissionnement">Contrat de commissionnement</SelectItem>
+                    <SelectItem value="autre">Autre document</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes (optionnel)</Label>
+                <input
+                  className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                  placeholder="Remarques éventuelles"
+                  value={newDocForm.notes}
+                  onChange={(e) => setNewDocForm({ ...newDocForm, notes: e.target.value })}
+                />
+              </div>
+              <Button
+                className="w-full bg-[#1A4D2E] hover:bg-[#143d24]"
+                onClick={handleAddDoc}
+                disabled={addingDoc}
+              >
+                {addingDoc ? "Ajout en cours..." : "Ajouter le document"}
+              </Button>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

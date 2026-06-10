@@ -3947,6 +3947,124 @@ async def get_notifications():
     }
 
 
+
+# ============= DOCUMENTS CHAUFFEUR =============
+
+class DocumentChauffeurBase(BaseModel):
+    chauffeur_id: str
+    nom: str
+    type_document: str = "autre"  # contrat_travail, fiche_paie, commissionnement, autre
+    statut: str = "en_attente"    # en_attente, signe, refuse
+    docusign_envelope_id: Optional[str] = None
+    reference_liee: Optional[str] = None
+    notes: Optional[str] = None
+
+class DocumentChauffeurCreate(DocumentChauffeurBase):
+    pass
+
+class DocumentChauffeur(DocumentChauffeurBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    signed_at: Optional[datetime] = None
+
+async def get_current_chauffeur_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Auth chauffeur via JWT pour l'espace documents"""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+    payload = decode_jwt_token(credentials.credentials)
+    if not payload or payload.get("type") != "chauffeur":
+        raise HTTPException(status_code=401, detail="Token invalide")
+    chauffeur = await db.chauffeurs.find_one({"id": payload.get("chauffeur_id")}, {"_id": 0})
+    if not chauffeur:
+        raise HTTPException(status_code=401, detail="Chauffeur non trouvé")
+    return chauffeur
+
+@api_router.get("/chauffeur/documents/en-attente")
+async def get_chauffeur_docs_en_attente(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Documents en attente pour le chauffeur connecté - accepte token UUID ou JWT"""
+    chauffeur_id = None
+    if credentials:
+        # Essai JWT
+        payload = decode_jwt_token(credentials.credentials)
+        if payload and payload.get("type") == "chauffeur":
+            chauffeur_id = payload.get("chauffeur_id")
+        else:
+            # Fallback : token UUID stocké en session
+            chauffeur = await db.chauffeurs.find_one({"token_session": credentials.credentials}, {"_id": 0})
+            if chauffeur:
+                chauffeur_id = chauffeur["id"]
+    if not chauffeur_id:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+    docs = await db.documents_chauffeur.find(
+        {"chauffeur_id": chauffeur_id, "statut": "en_attente"}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return docs
+
+@api_router.get("/chauffeur/documents/signes")
+async def get_chauffeur_docs_signes(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Documents signés pour le chauffeur connecté"""
+    chauffeur_id = None
+    if credentials:
+        payload = decode_jwt_token(credentials.credentials)
+        if payload and payload.get("type") == "chauffeur":
+            chauffeur_id = payload.get("chauffeur_id")
+        else:
+            chauffeur = await db.chauffeurs.find_one({"token_session": credentials.credentials}, {"_id": 0})
+            if chauffeur:
+                chauffeur_id = chauffeur["id"]
+    if not chauffeur_id:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+    docs = await db.documents_chauffeur.find(
+        {"chauffeur_id": chauffeur_id, "statut": "signe"}, {"_id": 0}
+    ).sort("signed_at", -1).to_list(100)
+    return docs
+
+@api_router.get("/admin/documents-chauffeur")
+async def get_all_documents_chauffeur(admin: dict = Depends(get_current_admin)):
+    docs = await db.documents_chauffeur.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return docs
+
+@api_router.get("/admin/chauffeurs/{chauffeur_id}/documents")
+async def get_documents_par_chauffeur(chauffeur_id: str, admin: dict = Depends(get_current_admin)):
+    docs = await db.documents_chauffeur.find(
+        {"chauffeur_id": chauffeur_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    return docs
+
+@api_router.post("/admin/documents-chauffeur", response_model=DocumentChauffeur)
+async def create_document_chauffeur(
+    input: DocumentChauffeurCreate,
+    admin: dict = Depends(get_current_admin)
+):
+    doc = DocumentChauffeur(**input.model_dump())
+    d = doc.model_dump()
+    d["created_at"] = d["created_at"].isoformat()
+    await db.documents_chauffeur.insert_one(d)
+    return doc
+
+@api_router.put("/admin/documents-chauffeur/{doc_id}")
+async def update_document_chauffeur(
+    doc_id: str,
+    statut: Optional[str] = None,
+    admin: dict = Depends(get_current_admin)
+):
+    update = {}
+    if statut:
+        update["statut"] = statut
+        if statut == "signe":
+            update["signed_at"] = datetime.now(timezone.utc).isoformat()
+    if not update:
+        raise HTTPException(status_code=400, detail="Aucune donnée à mettre à jour")
+    await db.documents_chauffeur.update_one({"id": doc_id}, {"": update})
+    doc = await db.documents_chauffeur.find_one({"id": doc_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/admin/documents-chauffeur/{doc_id}")
+async def delete_document_chauffeur(doc_id: str, admin: dict = Depends(get_current_admin)):
+    await db.documents_chauffeur.delete_one({"id": doc_id})
+    return {"message": "Document supprimé"}
+
 # ============= PORTAIL CLIENT - MODÈLES =============
 
 class ClientPortalLogin(BaseModel):

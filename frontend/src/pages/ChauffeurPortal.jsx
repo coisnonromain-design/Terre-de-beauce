@@ -24,6 +24,12 @@ import {
   Check,
   Image,
   Euro,
+  FileText,
+  CheckCircle,
+  Download,
+  ExternalLink,
+  ClipboardList,
+  Folder,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -141,6 +147,13 @@ export default function ChauffeurPortal() {
   const [tours, setTours] = useState([]);
   const [photos, setPhotos] = useState([]);
 
+  // États espace documents
+  const [activeTab, setActiveTab] = useState("pointage"); // "pointage" | "documents"
+  const [docsEnAttente, setDocsEnAttente] = useState([]);
+  const [docsSignes, setDocsSignes] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsLoaded, setDocsLoaded] = useState(false);
+
   const [noteFraisForm, setNoteFraisForm] = useState({
     date: new Date().toISOString().split("T")[0],
     montant: "",
@@ -206,6 +219,26 @@ export default function ChauffeurPortal() {
       console.error("Erreur sync:", error);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const fetchDocuments = async () => {
+    if (docsLoaded) return;
+    setDocsLoading(true);
+    try {
+      const session = JSON.parse(localStorage.getItem("chauffeur_session") || "{}");
+      const headers = { Authorization: `Bearer ${session.token}` };
+      const [attenteRes, signesRes] = await Promise.all([
+        axios.get(`${API}/chauffeur/documents/en-attente`, { headers }),
+        axios.get(`${API}/chauffeur/documents/signes`, { headers }),
+      ]);
+      setDocsEnAttente(attenteRes.data);
+      setDocsSignes(signesRes.data);
+      setDocsLoaded(true);
+    } catch (error) {
+      // Silencieux si l'endpoint n'est pas encore dispo
+    } finally {
+      setDocsLoading(false);
     }
   };
 
@@ -439,7 +472,7 @@ export default function ChauffeurPortal() {
       </header>
 
       {/* Contenu principal */}
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4" style={{display: activeTab === "pointage" ? "block" : "none"}}>
         {/* Sélection du chantier */}
         <Card className="border-0 shadow-md">
           <CardContent className="p-4">
@@ -638,29 +671,158 @@ export default function ChauffeurPortal() {
         </div>
       </div>
 
-      {/* Barre d'action fixe en bas */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-3 flex gap-2">
-        <Button 
-          variant="outline" 
-          className="flex-1"
-          onClick={() => setNotesFraisOpen(true)}
-        >
-          <Receipt className="w-4 h-4 mr-2" />
-          Note de frais
-        </Button>
-        <Button 
-          className="flex-1 bg-[#1A4D2E] hover:bg-[#143d24]"
-          onClick={handleSave}
-          disabled={saving || !form.chantier_id}
-          data-testid="mobile-save-btn"
-        >
-          {saving ? (
-            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Save className="w-4 h-4 mr-2" />
-          )}
-          Enregistrer
-        </Button>
+      {/* Espace Documents Chauffeur */}
+      {activeTab === "documents" && (
+        <div className="p-4 pb-32 space-y-4">
+          <h2 className="text-lg font-bold font-['Barlow_Condensed'] text-slate-800">Mes documents</h2>
+
+          {/* En attente de signature */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="w-4 h-4 text-amber-500" />
+              <span className="text-sm font-medium text-slate-700">En attente de signature</span>
+              {docsEnAttente.length > 0 && (
+                <span className="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                  {docsEnAttente.length}
+                </span>
+              )}
+            </div>
+            {docsLoading ? (
+              <div className="text-center py-6 text-slate-400">
+                <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2" />
+                <p className="text-sm">Chargement...</p>
+              </div>
+            ) : docsEnAttente.length === 0 ? (
+              <div className="bg-slate-50 rounded-xl p-4 text-center text-slate-400">
+                <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
+                <p className="text-sm">Aucun document en attente</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {docsEnAttente.map((doc) => (
+                  <div key={doc.id} className="bg-white rounded-xl p-4 shadow-sm border border-amber-100">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <p className="font-medium text-sm text-slate-800">{doc.nom}</p>
+                        {doc.reference_liee && (
+                          <p className="text-xs text-slate-400 mt-0.5">{doc.reference_liee}</p>
+                        )}
+                        <p className="text-xs text-slate-400 mt-1">
+                          Reçu le {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                        </p>
+                      </div>
+                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
+                        À signer
+                      </span>
+                    </div>
+                    {doc.docusign_envelope_id && (
+                      <Button size="sm" className="w-full mt-3 bg-[#1A4D2E] hover:bg-[#143d24]">
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Ouvrir et signer
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Documents signés */}
+          <div>
+            <div className="flex items-center gap-2 mb-2 mt-4">
+              <CheckCircle className="w-4 h-4 text-green-500" />
+              <span className="text-sm font-medium text-slate-700">Documents signés</span>
+              {docsSignes.length > 0 && (
+                <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                  {docsSignes.length}
+                </span>
+              )}
+            </div>
+            {docsLoading ? null : docsSignes.length === 0 ? (
+              <div className="bg-slate-50 rounded-xl p-4 text-center text-slate-400">
+                <FileText className="w-8 h-8 mx-auto mb-2" />
+                <p className="text-sm">Aucun document signé</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {docsSignes.map((doc) => (
+                  <div key={doc.id} className="bg-white rounded-xl p-4 shadow-sm border border-green-100">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <p className="font-medium text-sm text-slate-800">{doc.nom}</p>
+                        {doc.reference_liee && (
+                          <p className="text-xs text-slate-400 mt-0.5">{doc.reference_liee}</p>
+                        )}
+                        <p className="text-xs text-slate-400 mt-1">
+                          Signé le {doc.signed_at ? new Date(doc.signed_at).toLocaleDateString("fr-FR") : "—"}
+                        </p>
+                      </div>
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                        Signé
+                      </span>
+                    </div>
+                    <Button variant="outline" size="sm" className="w-full mt-3">
+                      <Download className="w-4 h-4 mr-2" />
+                      Télécharger
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Barre de navigation fixe en bas */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-10">
+        {/* Actions contextuelles selon l'onglet actif */}
+        {activeTab === "pointage" && (
+          <div className="p-3 flex gap-2 border-b">
+            <Button 
+              variant="outline" 
+              className="flex-1"
+              onClick={() => setNotesFraisOpen(true)}
+            >
+              <Receipt className="w-4 h-4 mr-2" />
+              Note de frais
+            </Button>
+            <Button 
+              className="flex-1 bg-[#1A4D2E] hover:bg-[#143d24]"
+              onClick={handleSave}
+              disabled={saving || !form.chantier_id}
+              data-testid="mobile-save-btn"
+            >
+              {saving ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              Enregistrer
+            </Button>
+          </div>
+        )}
+        {/* Onglets de navigation */}
+        <div className="flex">
+          <button
+            className={`flex-1 flex flex-col items-center py-2 gap-0.5 text-xs font-medium transition-colors ${activeTab === "pointage" ? "text-[#1A4D2E]" : "text-slate-400"}`}
+            onClick={() => setActiveTab("pointage")}
+          >
+            <ClipboardList className="w-5 h-5" />
+            Pointage
+          </button>
+          <button
+            className={`flex-1 flex flex-col items-center py-2 gap-0.5 text-xs font-medium transition-colors relative ${activeTab === "documents" ? "text-[#1A4D2E]" : "text-slate-400"}`}
+            onClick={() => { setActiveTab("documents"); fetchDocuments(); }}
+          >
+            <Folder className="w-5 h-5" />
+            Documents
+            {docsEnAttente.length > 0 && (
+              <span className="absolute top-1 right-6 w-4 h-4 bg-amber-500 text-white text-xs rounded-full flex items-center justify-center">
+                {docsEnAttente.length}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Modal Caméra */}
