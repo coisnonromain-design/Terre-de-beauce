@@ -21,6 +21,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -329,6 +330,9 @@ export default function Documents() {
             <DialogTitle className="font-['Barlow_Condensed'] text-2xl">
               Déposer un document
             </DialogTitle>
+            <DialogDescription>
+              Téléversez un PDF et assignez-le à un ou plusieurs chauffeurs.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div>

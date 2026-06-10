@@ -47,6 +47,7 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
+  SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import {
@@ -902,6 +903,9 @@ export default function ChauffeurPortal() {
               <FolderArchive className="w-6 h-6 text-[#D9A520]" />
               Mes documents
             </SheetTitle>
+            <SheetDescription>
+              Consultez, téléchargez et signez vos documents.
+            </SheetDescription>
           </SheetHeader>
 
           <div className="space-y-6 mt-4" data-testid="chauffeur-documents-list">

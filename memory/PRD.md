@@ -103,6 +103,21 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - Colonne "Banque" dans le tableau des factures
   - Affichage des coordonnées bancaires dans le détail de facture
 
+### Phase 8 (Numérotation unifiée, DocuSign persistant & Espace Documentaire) - Décembre 2025 ✅ TERMINÉ
+- ✅ **Numérotation unifiée par chantier**
+  - Chantier auto-numéroté `CH-XXXX-2026` (compteur MongoDB `db.counters`, démarrage à 0003 pour 2026)
+  - Le numéro se propage : Contrat `CT-XXXX-2026`, Relevé des heures `RH-XXXX-2026` (PDF récap pointages), Facture `FC-XXXX-2026`
+  - Repli automatique pour les anciens chantiers (référence hors format) + unicité du numéro de facture
+  - Champ Référence en lecture seule côté UI (généré automatiquement)
+- ✅ **DocuSign — tokens persistants + rafraîchissement auto**
+  - Tokens stockés dans MongoDB (`db.docusign_tokens`) au lieu de la mémoire → survivent aux redéploiements
+  - Rafraîchissement automatique via refresh_token, scope `extended` ajouté
+- ✅ **Espace Documentaire (Admin + Chauffeur)**
+  - Admin : page `/admin/documents` — dépôt de PDF, assignation à un ou plusieurs chauffeurs, 2 catégories (à signer / à consulter), tableau, téléchargement, suppression
+  - Chauffeur (PWA) : section "Mes documents" — consultation, téléchargement, **signature intégrée DocuSign (embedded signing)**, récupération du PDF signé
+  - Stockage des fichiers via **Object Storage Emergent** (clé `EMERGENT_LLM_KEY`)
+  - Validation PDF à l'upload, clés de stockage masquées dans les réponses API
+
 ## API Endpoints
 
 ### Gestion des entités
@@ -121,6 +136,15 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - `GET/POST/PUT/DELETE /api/comptes-bancaires` - Gestion comptes bancaires
 - `GET/POST/PUT/DELETE /api/contrats-ccpa` - Gestion contrats CCPA
 - `GET /api/chantiers/{id}/contrat-ccpa` - Contrat CCPA d'un chantier
+
+### Espace Documentaire (Phase 8)
+- `POST /api/documents` - Upload PDF (multipart) + assignation multi-chauffeurs (object storage)
+- `GET /api/documents` - Liste admin (filtres chauffeur_id/categorie/statut/type_document)
+- `GET /api/documents/chauffeur/{chauffeur_id}` - Documents d'un chauffeur
+- `GET /api/documents/{id}/download?signed=true|false` - Téléchargement PDF source ou signé
+- `DELETE /api/documents/{id}` - Suppression
+- `POST /api/documents/{id}/sign?return_url=...` - URL de signature intégrée DocuSign (embedded)
+- `POST /api/documents/{id}/sync` - Vérifie la signature et stocke le PDF signé
 
 ### DocuSign
 - `GET /api/docusign/status` - État de connexion DocuSign
@@ -167,6 +191,14 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [ ] **Géolocalisation des tracteurs** - Suivi GPS et historique des trajets
 - [ ] Intégration comptable (export pour logiciels comptables)
 - [ ] **Modification mot de passe chauffeur** - Permettre aux chauffeurs de changer leur code d'accès
+- [ ] **Authentification des endpoints `/api/documents/*`** - Actuellement ouverts (comme le reste de l'app) ; sécuriser l'accès aux documents RH sensibles (JWT chauffeur/admin)
+- [ ] **Refactorisation `server.py`** (>4300 lignes) vers routers modulaires
+- [ ] **Soft-delete object storage** - Les fichiers PDF restent orphelins en stockage après suppression d'un document (pas d'API delete côté storage)
+
+## Notes — Espace Documentaire & DocuSign (Déc 2025)
+- La **signature intégrée DocuSign** nécessite que DocuSign soit authentifié (OAuth) depuis l'app de production. En preview, `/api/documents/{id}/sign` renvoie 401 (attendu).
+- Le PDF "à signer" reçoit un onglet de signature à position fixe (page 1, bas). Amélioration possible : placement par ancre (`anchor_string`).
+- Chaque chauffeur d'un envoi multi-chauffeurs reçoit son propre enregistrement et sa propre enveloppe DocuSign.
 
 ## Next Tasks
 1. **Configurer DocuSign pour la production** - Remplacer les clés sandbox par les clés de production

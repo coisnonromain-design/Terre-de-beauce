@@ -4077,6 +4077,10 @@ async def upload_document(
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Fichier vide")
+    fname = (file.filename or "").lower()
+    ctype = (file.content_type or "").lower()
+    if "pdf" not in ctype and not fname.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Seuls les fichiers PDF sont acceptés")
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "pdf"
     source_key = f"{STORAGE_APP_NAME}/documents/{uuid.uuid4()}.{ext}"
     content_type = file.content_type or "application/pdf"
