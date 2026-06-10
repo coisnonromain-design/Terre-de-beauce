@@ -12,6 +12,8 @@ import {
   MapPin,
   FileText,
   Euro,
+  KeyRound,
+  Globe,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +72,10 @@ export default function Clients() {
   const [editingClient, setEditingClient] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState(null);
+  const [portailDialogOpen, setPortailDialogOpen] = useState(false);
+  const [portailClient, setPortailClient] = useState(null);
+  const [portailForm, setPortailForm] = useState({ identifiant: "", password: "" });
+  const [portailLoading, setPortailLoading] = useState(false);
 
   const [form, setForm] = useState({
     raison_sociale: "",
@@ -150,6 +156,30 @@ export default function Clients() {
       ...form,
       tarifs: form.tarifs.filter((_, i) => i !== index),
     });
+  };
+
+  const handleConfigurePortail = async () => {
+    if (!portailForm.identifiant || !portailForm.password) {
+      toast.error("Veuillez remplir l'identifiant et le mot de passe");
+      return;
+    }
+    setPortailLoading(true);
+    try {
+      const token = localStorage.getItem("admin_token");
+      await axios.post(
+        `${API}/admin/clients/${portailClient.id}/portail?identifiant=${encodeURIComponent(portailForm.identifiant)}&password=${encodeURIComponent(portailForm.password)}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success("Accès portail configuré avec succès");
+      setPortailDialogOpen(false);
+      setPortailForm({ identifiant: "", password: "" });
+      fetchClients();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de la configuration");
+    } finally {
+      setPortailLoading(false);
+    }
   };
 
   const openEditDialog = (client) => {
@@ -361,6 +391,18 @@ export default function Clients() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Configurer accès portail"
+                          onClick={() => {
+                            setPortailClient(client);
+                            setPortailForm({ identifiant: "", password: "" });
+                            setPortailDialogOpen(true);
+                          }}
+                        >
+                          <Globe className={`w-4 h-4 ${client.portail_actif ? "text-green-500" : "text-muted-foreground"}`} />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -697,6 +739,65 @@ export default function Clients() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    {/* Dialog Configuration Portail Client */}
+      <Dialog open={portailDialogOpen} onOpenChange={setPortailDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-['Barlow_Condensed'] text-2xl flex items-center gap-2">
+              <Globe className="w-5 h-5 text-blue-500" />
+              Accès Portail Client
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Configurez les identifiants de connexion pour <strong>{portailClient?.raison_sociale}</strong>
+            </p>
+            {portailClient?.portail_actif && (
+              <div className="flex items-center gap-2 p-2 bg-green-50 rounded-md border border-green-200">
+                <Globe className="w-4 h-4 text-green-600" />
+                <span className="text-sm text-green-700">Portail actif — identifiant : <strong>{portailClient?.identifiant_portail}</strong></span>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Identifiant</Label>
+              <div className="relative">
+                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="ex: client-001"
+                  value={portailForm.identifiant}
+                  onChange={(e) => setPortailForm({ ...portailForm, identifiant: e.target.value })}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Mot de passe</Label>
+              <div className="relative">
+                <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="password"
+                  placeholder="Mot de passe sécurisé"
+                  value={portailForm.password}
+                  onChange={(e) => setPortailForm({ ...portailForm, password: e.target.value })}
+                  className="pl-10"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Ces identifiants seront communiqués au client</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPortailDialogOpen(false)}>Annuler</Button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleConfigurePortail}
+              disabled={portailLoading}
+            >
+              {portailLoading ? "Configuration..." : "Enregistrer l'accès"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

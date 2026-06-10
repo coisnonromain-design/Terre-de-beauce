@@ -3946,6 +3946,178 @@ async def get_notifications():
         'notifications': notifications
     }
 
+
+# ============= PORTAIL CLIENT - MODÈLES =============
+
+class ClientPortalLogin(BaseModel):
+    identifiant: str
+    password: str
+
+class ClientPortalSession(BaseModel):
+    client_id: str
+    client_nom: str
+    token: str
+
+class DocumentStatut(str, Enum):
+    EN_ATTENTE = "en_attente"
+    SIGNE = "signe"
+    REFUSE = "refuse"
+
+class DocumentType(str, Enum):
+    CONTRAT = "contrat"
+    FACTURE = "facture"
+    AUTRE = "autre"
+
+class DocumentClientBase(BaseModel):
+    client_id: str
+    nom: str
+    type_document: DocumentType = DocumentType.AUTRE
+    statut: DocumentStatut = DocumentStatut.EN_ATTENTE
+    docusign_envelope_id: Optional[str] = None
+    reference_liee: Optional[str] = None  # ex: CH-0003-2026
+    notes: Optional[str] = None
+
+class DocumentClientCreate(DocumentClientBase):
+    pass
+
+class DocumentClient(DocumentClientBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    signed_at: Optional[datetime] = None
+    file_url: Optional[str] = None
+
+# ============= PORTAIL CLIENT - AUTH =============
+
+async def get_current_client(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+    payload = decode_jwt_token(credentials.credentials)
+    if not payload or payload.get("type") != "client":
+        raise HTTPException(status_code=401, detail="Token invalide")
+    client = await db.clients.find_one({"id": payload.get("client_id")}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=401, detail="Client non trouvé")
+    return client
+
+@api_router.post("/client/login", response_model=ClientPortalSession)
+async def client_login(input: ClientPortalLogin):
+    client = await db.clients.find_one({"identifiant_portail": input.identifiant}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=401, detail="Identifiant ou mot de passe incorrect")
+    if not client.get("password_portail"):
+        raise HTTPException(status_code=401, detail="Accès portail non configuré pour ce client")
+    if not verify_password(input.password, client["password_portail"]):
+        raise HTTPException(status_code=401, detail="Identifiant ou mot de passe incorrect")
+    token = create_jwt_token({"type": "client", "client_id": client["id"]})
+    return ClientPortalSession(
+        client_id=client["id"],
+        client_nom=client.get("raison_sociale", ""),
+        token=token
+    )
+
+# ============= PORTAIL CLIENT - DOCUMENTS =============
+
+@api_router.get("/client/documents")
+async def get_client_documents(current_client: dict = Depends(get_current_client)):
+    docs = await db.documents_client.find(
+        {"client_id": current_client["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    return docs
+
+@api_router.get("/client/documents/en-attente")
+async def get_client_docs_en_attente(current_client: dict = Depends(get_current_client)):
+    docs = await db.documents_client.find(
+        {"client_id": current_client["id"], "statut": "en_attente"}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return docs
+
+@api_router.get("/client/documents/signes")
+async def get_client_docs_signes(current_client: dict = Depends(get_current_client)):
+    docs = await db.documents_client.find(
+        {"client_id": current_client["id"], "statut": "signe"}, {"_id": 0}
+    ).sort("signed_at", -1).to_list(100)
+    return docs
+
+@api_router.get("/client/me")
+async def get_client_me(current_client: dict = Depends(get_current_client)):
+    return {
+        "id": current_client["id"],
+        "raison_sociale": current_client.get("raison_sociale"),
+        "email": current_client.get("email"),
+        "ville": current_client.get("ville"),
+    }
+
+# ============= ADMIN - GESTION ACCÈS PORTAIL CLIENT =============
+
+@api_router.post("/admin/clients/{client_id}/portail")
+async def configurer_acces_portail(
+    client_id: str,
+    identifiant: str,
+    password: str,
+    admin: dict = Depends(get_current_admin)
+):
+    """Configure l'accès portail d'un client (identifiant + mot de passe)"""
+    client = await db.clients.find_one({"id": client_id}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    hashed = hash_password(password)
+    await db.clients.update_one(
+        {"id": client_id},
+        {"": {"identifiant_portail": identifiant, "password_portail": hashed, "portail_actif": True}}
+    )
+    return {"message": f"Accès portail configuré pour {client.get('raison_sociale')}"}
+
+@api_router.get("/admin/clients/{client_id}/portail")
+async def get_portail_status(client_id: str, admin: dict = Depends(get_current_admin)):
+    client = await db.clients.find_one({"id": client_id}, {"_id": 0, "password_portail": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    return {
+        "portail_actif": client.get("portail_actif", False),
+        "identifiant_portail": client.get("identifiant_portail"),
+    }
+
+# ============= ADMIN - DOCUMENTS CLIENT =============
+
+@api_router.get("/admin/documents-client")
+async def get_all_documents_client(admin: dict = Depends(get_current_admin)):
+    docs = await db.documents_client.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return docs
+
+@api_router.post("/admin/documents-client", response_model=DocumentClient)
+async def create_document_client(
+    input: DocumentClientCreate,
+    admin: dict = Depends(get_current_admin)
+):
+    doc = DocumentClient(**input.model_dump())
+    d = doc.model_dump()
+    d["created_at"] = d["created_at"].isoformat()
+    await db.documents_client.insert_one(d)
+    return doc
+
+@api_router.put("/admin/documents-client/{doc_id}")
+async def update_document_client(
+    doc_id: str,
+    statut: Optional[str] = None,
+    admin: dict = Depends(get_current_admin)
+):
+    update = {}
+    if statut:
+        update["statut"] = statut
+        if statut == "signe":
+            update["signed_at"] = datetime.now(timezone.utc).isoformat()
+    if not update:
+        raise HTTPException(status_code=400, detail="Aucune donnée à mettre à jour")
+    await db.documents_client.update_one({"id": doc_id}, {"": update})
+    doc = await db.documents_client.find_one({"id": doc_id}, {"_id": 0})
+    return doc
+
+@api_router.delete("/admin/documents-client/{doc_id}")
+async def delete_document_client(doc_id: str, admin: dict = Depends(get_current_admin)):
+    await db.documents_client.delete_one({"id": doc_id})
+    return {"message": "Document supprimé"}
+
 # Include the router in the main app
 app.include_router(api_router)
 

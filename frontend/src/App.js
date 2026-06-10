@@ -28,6 +28,7 @@ import ChauffeurPortal from "@/pages/ChauffeurPortal";
 
 // Portail Client
 import ClientLogin from "@/pages/ClientLogin";
+import ClientPortal from "@/pages/ClientPortal";
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
           
           {/* Authentification Client */}
           <Route path="/client/login" element={<ClientLogin />} />
+          <Route path="/client/portal" element={<ClientPortal />} />
           
           {/* ERP Admin (protégé) */}
           <Route path="/admin" element={<Layout />}>
