@@ -1237,7 +1237,7 @@ async def client_login(login: ClientLogin):
     )
 
 @api_router.post("/clients/{client_id}/generate-credentials")
-async def generate_client_credentials(client_id: str):
+async def generate_client_credentials(client_id: str, admin: dict = Depends(get_current_admin)):
     """Admin: génère/régénère le mot de passe d'accès d'un client. Renvoie le mot de passe en clair une seule fois."""
     client = await db.clients.find_one({"id": client_id}, {"_id": 0})
     if not client:
@@ -1252,7 +1252,7 @@ async def generate_client_credentials(client_id: str):
     return {"email": client["email"], "password": password, "acces_actif": True}
 
 @api_router.post("/clients/{client_id}/revoke-credentials")
-async def revoke_client_credentials(client_id: str):
+async def revoke_client_credentials(client_id: str, admin: dict = Depends(get_current_admin)):
     """Admin: désactive l'accès d'un client."""
     client = await db.clients.find_one({"id": client_id}, {"_id": 0})
     if not client:

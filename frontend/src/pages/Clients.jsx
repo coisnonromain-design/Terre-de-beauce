@@ -25,6 +25,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -216,7 +217,12 @@ export default function Clients() {
   const handleGenerateCredentials = async (client) => {
     setGenLoadingId(client.id);
     try {
-      const res = await axios.post(`${API}/clients/${client.id}/generate-credentials`);
+      const token = localStorage.getItem("admin_token");
+      const res = await axios.post(
+        `${API}/clients/${client.id}/generate-credentials`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       setCredModal({
         raison_sociale: client.raison_sociale,
         email: res.data.email,
@@ -752,6 +758,9 @@ export default function Clients() {
               <CheckCircle2 className="w-6 h-6 text-green-600" />
               Accès client {credModal?.regenerated ? "régénéré" : "créé"}
             </DialogTitle>
+            <DialogDescription>
+              Identifiants de connexion à l'espace client. À communiquer au client.
+            </DialogDescription>
           </DialogHeader>
           {credModal && (
             <div className="space-y-4">

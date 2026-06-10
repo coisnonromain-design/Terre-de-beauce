@@ -118,6 +118,19 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
   - Stockage des fichiers via **Object Storage Emergent** (clé `EMERGENT_LLM_KEY`)
   - Validation PDF à l'upload, clés de stockage masquées dans les réponses API
 
+### Phase 9 (Espace Client & Réorganisation Documentaire) - Décembre 2025 ✅ TERMINÉ
+- ✅ **Espace Client** (`/client/login` → `/client/portal`)
+  - Authentification par **email + mot de passe** (JWT type "client", bcrypt) — même pattern que l'admin
+  - L'admin **génère/régénère** le mot de passe depuis la fiche client (bouton clé, modale affichant le mot de passe une fois) — endpoints **protégés par auth admin**
+  - 3ème carte « Espace Client » sur la page d'accueil
+- ✅ **Documents généralisés chauffeur OU client**
+  - Champ `destinataire_type` ("chauffeur"|"client") + `destinataire_id` (rétro-compatible avec `chauffeur_ids`)
+  - Admin : sélecteur de type de destinataire dans le dépôt de document
+  - Endpoints `GET /api/documents/client/{id}` et `/chauffeur/{id}`
+- ✅ **Réorganisation en 2 sections** (chauffeur ET client)
+  - 🟠 « En attente de signature » (documents à signer non signés)
+  - 🟢 « Documents signés & disponibles » (documents signés + documents à consulter, téléchargeables/extractibles)
+
 ## API Endpoints
 
 ### Gestion des entités
@@ -143,8 +156,15 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - `GET /api/documents/chauffeur/{chauffeur_id}` - Documents d'un chauffeur
 - `GET /api/documents/{id}/download?signed=true|false` - Téléchargement PDF source ou signé
 - `DELETE /api/documents/{id}` - Suppression
-- `POST /api/documents/{id}/sign?return_url=...` - URL de signature intégrée DocuSign (embedded)
+- `POST /api/documents/{id}/sign?return_url=...` - URL de signature intégrée DocuSign (embedded, chauffeur ou client)
 - `POST /api/documents/{id}/sync` - Vérifie la signature et stocke le PDF signé
+
+### Espace Client (Phase 9)
+- `POST /api/client/login` - Connexion client (email + mot de passe) → JWT type "client"
+- `POST /api/clients/{id}/generate-credentials` - **[admin]** Génère/régénère le mot de passe d'accès (renvoyé une fois)
+- `POST /api/clients/{id}/revoke-credentials` - **[admin]** Désactive l'accès client
+- `GET /api/documents/client/{client_id}` - Documents d'un client
+- `GET /api/documents/chauffeur/{chauffeur_id}` - Documents d'un chauffeur
 
 ### DocuSign
 - `GET /api/docusign/status` - État de connexion DocuSign
@@ -191,9 +211,11 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - [ ] **Géolocalisation des tracteurs** - Suivi GPS et historique des trajets
 - [ ] Intégration comptable (export pour logiciels comptables)
 - [ ] **Modification mot de passe chauffeur** - Permettre aux chauffeurs de changer leur code d'accès
-- [ ] **Authentification des endpoints `/api/documents/*`** - Actuellement ouverts (comme le reste de l'app) ; sécuriser l'accès aux documents RH sensibles (JWT chauffeur/admin)
-- [ ] **Refactorisation `server.py`** (>4300 lignes) vers routers modulaires
-- [ ] **Soft-delete object storage** - Les fichiers PDF restent orphelins en stockage après suppression d'un document (pas d'API delete côté storage)
+- [ ] **Authentification des endpoints `/api/documents/*`** - Actuellement ouverts (comme le reste de l'app) ; sécuriser l'accès aux documents RH sensibles (JWT chauffeur/client/admin). Note: `generate-credentials`/`revoke-credentials` SONT protégés (admin).
+- [ ] **Protection JWT sur `/api/documents/client/{id}` et `/chauffeur/{id}`** - Vérifier que le token correspond à l'id demandé
+- [ ] **Brute-force lockout** sur `/api/client/login` (et `/admin/login`)
+- [ ] **Refactorisation `server.py`** (>4400 lignes) vers routers modulaires
+- [ ] **Soft-delete object storage** - Les fichiers PDF restent orphelins en stockage après suppression d'un document
 
 ## Notes — Espace Documentaire & DocuSign (Déc 2025)
 - La **signature intégrée DocuSign** nécessite que DocuSign soit authentifié (OAuth) depuis l'app de production. En preview, `/api/documents/{id}/sign` renvoie 401 (attendu).
