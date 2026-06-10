@@ -47,11 +47,12 @@ JWT_EXPIRATION_HOURS = 24
 security = HTTPBearer(auto_error=False)
 
 # DocuSign configuration
-DOCUSIGN_INTEGRATION_KEY = os.environ.get('DOCUSIGN_INTEGRATION_KEY')
-DOCUSIGN_SECRET_KEY = os.environ.get('DOCUSIGN_SECRET_KEY')
-DOCUSIGN_ACCOUNT_ID = os.environ.get('DOCUSIGN_ACCOUNT_ID')
+DOCUSIGN_INTEGRATION_KEY = os.environ.get('DOCUSIGN_INTEGRATION_KEY', 'e54a9490-73fa-4ed9-95ee-0792ccd27423')
+DOCUSIGN_SECRET_KEY = os.environ.get('DOCUSIGN_SECRET_KEY', 'b147c93b-24e4-4c7d-ac89-4deadeec97fb')
+DOCUSIGN_ACCOUNT_ID = os.environ.get('DOCUSIGN_ACCOUNT_ID', 'bf342295-257f-41bf-8b56-97b8a66f6358')
 DOCUSIGN_AUTH_SERVER = os.environ.get('DOCUSIGN_AUTH_SERVER', 'account-d.docusign.com')
 DOCUSIGN_BASE_URL = os.environ.get('DOCUSIGN_BASE_URL', 'https://demo.docusign.net/restapi')
+# Note: Pour la production, changer AUTH_SERVER -> account.docusign.com et BASE_URL -> https://na4.docusign.net/restapi
 
 # Create the main app without a prefix
 app = FastAPI(title="Terre de Beauce ERP")
