@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Truck, Users, ShieldCheck, LogIn } from "lucide-react";
+import { Truck, Users, ShieldCheck, LogIn, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -25,7 +25,7 @@ export default function LandingPage() {
         </div>
 
         {/* Cards de choix */}
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-3 gap-6">
           {/* Espace Administrateur */}
           <Card 
             className="group cursor-pointer border-2 border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 hover:border-[#D9A520]/50 transition-all duration-300"
@@ -73,6 +73,32 @@ export default function LandingPage() {
               >
                 <LogIn className="w-4 h-4 mr-2" />
                 Connexion Chauffeur
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Espace Client */}
+          <Card 
+            className="group cursor-pointer border-2 border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 hover:border-[#D9A520]/50 transition-all duration-300"
+            onClick={() => navigate("/client/login")}
+            data-testid="client-choice-card"
+          >
+            <CardContent className="p-8 text-center">
+              <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[#D9A520]/20 flex items-center justify-center group-hover:bg-[#D9A520]/30 transition-colors">
+                <Building2 className="w-8 h-8 text-[#D9A520]" />
+              </div>
+              <h2 className="text-2xl font-bold font-['Barlow_Condensed'] text-white mb-2">
+                Espace Client
+              </h2>
+              <p className="text-white/60 mb-6">
+                Consultez et signez vos documents en toute sécurité
+              </p>
+              <Button 
+                variant="outline"
+                className="w-full border-white/30 text-white hover:bg-white/10"
+              >
+                <LogIn className="w-4 h-4 mr-2" />
+                Connexion Client
               </Button>
             </CardContent>
           </Card>

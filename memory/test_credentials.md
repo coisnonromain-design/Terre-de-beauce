@@ -15,3 +15,10 @@
 ## DocuSign (sandbox/démo)
 - Configuré (clés en .env), mais NON authentifié en preview (le flux OAuth doit être fait depuis l'app).
 - La signature intégrée (`/api/documents/{id}/sign`) renvoie 401 tant que DocuSign n'est pas connecté — comportement normal.
+
+## Client (espace client — nouveau)
+- Connexion par **email + mot de passe** sur `/client/login` → portail `/client/portal`.
+- L'admin génère le mot de passe via `POST /api/clients/{client_id}/generate-credentials` (renvoie le password en clair une fois). Bouton « clé » (KeyRound) dans la page admin Clients.
+- Client de test avec email : `test@client.com` (id `512b68d0-2a7c-4e2c-a942-baca41baa7c1`, raison sociale « Test Client Tarifs »). Générer un accès via l'admin puis se connecter.
+- Autre client avec email : `jc.coisnon@groupecoisnon.fr` (SARL JC COISNON).
+- Login API: `POST /api/client/login` body `{"email","password"}` → token type "client", stocké en localStorage `client_session`.

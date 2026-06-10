@@ -12,6 +12,9 @@ import {
   MapPin,
   FileText,
   Euro,
+  KeyRound,
+  Copy,
+  CheckCircle2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +73,8 @@ export default function Clients() {
   const [editingClient, setEditingClient] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState(null);
+  const [credModal, setCredModal] = useState(null); // {raison_sociale, email, password}
+  const [genLoadingId, setGenLoadingId] = useState(null);
 
   const [form, setForm] = useState({
     raison_sociale: "",
@@ -206,6 +211,32 @@ export default function Clients() {
       setDeleteDialogOpen(false);
       setClientToDelete(null);
     }
+  };
+
+  const handleGenerateCredentials = async (client) => {
+    setGenLoadingId(client.id);
+    try {
+      const res = await axios.post(`${API}/clients/${client.id}/generate-credentials`);
+      setCredModal({
+        raison_sociale: client.raison_sociale,
+        email: res.data.email,
+        password: res.data.password,
+        regenerated: client.acces_actif,
+      });
+      fetchClients();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de la génération de l'accès");
+    } finally {
+      setGenLoadingId(null);
+    }
+  };
+
+  const copyCredentials = () => {
+    if (!credModal) return;
+    navigator.clipboard.writeText(
+      `Espace Client Terre de Beauce\nEmail: ${credModal.email}\nMot de passe: ${credModal.password}`
+    );
+    toast.success("Identifiants copiés");
   };
 
   const filteredClients = clients.filter(
@@ -361,6 +392,21 @@ export default function Clients() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        {client.acces_actif && (
+                          <Badge className="bg-green-100 text-green-700 border-green-200 border text-xs mr-1">
+                            Accès actif
+                          </Badge>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={client.acces_actif ? "Régénérer le mot de passe" : "Générer un accès client"}
+                          onClick={() => handleGenerateCredentials(client)}
+                          disabled={genLoadingId === client.id || !client.email}
+                          data-testid={`generate-client-access-${client.id}`}
+                        >
+                          <KeyRound className={`w-4 h-4 ${client.acces_actif ? "text-green-600" : "text-[#D9A520]"}`} />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -697,6 +743,54 @@ export default function Clients() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modale identifiants client générés */}
+      <Dialog open={!!credModal} onOpenChange={(open) => !open && setCredModal(null)}>
+        <DialogContent className="sm:max-w-md" data-testid="client-credentials-modal">
+          <DialogHeader>
+            <DialogTitle className="font-['Barlow_Condensed'] text-2xl flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6 text-green-600" />
+              Accès client {credModal?.regenerated ? "régénéré" : "créé"}
+            </DialogTitle>
+          </DialogHeader>
+          {credModal && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Communiquez ces identifiants à <strong>{credModal.raison_sociale}</strong>. Le mot de passe
+                ne sera <strong>plus affiché</strong> ensuite.
+              </p>
+              <div className="space-y-2 bg-muted/50 rounded-lg p-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Email</Label>
+                  <p className="font-mono text-sm">{credModal.email}</p>
+                </div>
+                <Separator />
+                <div>
+                  <Label className="text-xs text-muted-foreground">Mot de passe</Label>
+                  <p className="font-mono text-lg font-bold tracking-wide" data-testid="client-generated-password">
+                    {credModal.password}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Connexion sur l'espace client : <strong>/client/login</strong>
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={copyCredentials}>
+              <Copy className="w-4 h-4 mr-2" /> Copier
+            </Button>
+            <Button
+              className="bg-[#1A4D2E] hover:bg-[#143d24]"
+              onClick={() => setCredModal(null)}
+              data-testid="close-credentials-modal-btn"
+            >
+              J'ai noté
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

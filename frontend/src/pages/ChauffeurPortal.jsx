@@ -920,7 +920,7 @@ export default function ChauffeurPortal() {
             {documents.filter((d) => d.categorie === "a_signer" && d.statut !== "signe").length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-amber-700 uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <FileSignature className="w-4 h-4" /> À signer
+                  <FileSignature className="w-4 h-4" /> En attente de signature
                 </h3>
                 <div className="space-y-3">
                   {documents
@@ -971,7 +971,7 @@ export default function ChauffeurPortal() {
             {documents.filter((d) => d.statut === "signe" || d.categorie === "a_consulter").length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-[#1A4D2E] uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <FileCheck2 className="w-4 h-4" /> Documents disponibles
+                  <FileCheck2 className="w-4 h-4" /> Documents signés &amp; disponibles
                 </h3>
                 <div className="space-y-3">
                   {documents

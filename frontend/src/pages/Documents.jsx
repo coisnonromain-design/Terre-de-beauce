@@ -11,6 +11,8 @@ import {
   FileCheck2,
   Upload,
   Users,
+  Building2,
+  Truck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,6 +74,7 @@ const STATUT_CONFIG = {
 export default function Documents() {
   const [documents, setDocuments] = useState([]);
   const [chauffeurs, setChauffeurs] = useState([]);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [categorieFilter, setCategorieFilter] = useState("all");
@@ -83,7 +86,8 @@ export default function Documents() {
     titre: "",
     type_document: "contrat_travail",
     categorie: "a_signer",
-    chauffeur_ids: [],
+    destinataire_type: "chauffeur",
+    destinataire_ids: [],
     file: null,
   });
 
@@ -93,12 +97,14 @@ export default function Documents() {
 
   const fetchData = async () => {
     try {
-      const [docsRes, chaufRes] = await Promise.all([
+      const [docsRes, chaufRes, clientsRes] = await Promise.all([
         axios.get(`${API}/documents`),
         axios.get(`${API}/chauffeurs`),
+        axios.get(`${API}/clients`),
       ]);
       setDocuments(docsRes.data);
       setChauffeurs(chaufRes.data);
+      setClients(clientsRes.data);
     } catch (error) {
       toast.error("Erreur lors du chargement des documents");
     } finally {
@@ -111,31 +117,33 @@ export default function Documents() {
       titre: "",
       type_document: "contrat_travail",
       categorie: "a_signer",
-      chauffeur_ids: [],
+      destinataire_type: "chauffeur",
+      destinataire_ids: [],
       file: null,
     });
   };
 
-  const toggleChauffeur = (id) => {
+  const toggleDestinataire = (id) => {
     setForm((prev) => ({
       ...prev,
-      chauffeur_ids: prev.chauffeur_ids.includes(id)
-        ? prev.chauffeur_ids.filter((c) => c !== id)
-        : [...prev.chauffeur_ids, id],
+      destinataire_ids: prev.destinataire_ids.includes(id)
+        ? prev.destinataire_ids.filter((c) => c !== id)
+        : [...prev.destinataire_ids, id],
     }));
   };
 
   const handleUpload = async () => {
     if (!form.titre.trim()) return toast.error("Veuillez saisir un titre");
     if (!form.file) return toast.error("Veuillez sélectionner un fichier PDF");
-    if (form.chauffeur_ids.length === 0)
-      return toast.error("Veuillez sélectionner au moins un chauffeur");
+    if (form.destinataire_ids.length === 0)
+      return toast.error("Veuillez sélectionner au moins un destinataire");
 
     const data = new FormData();
     data.append("titre", form.titre);
     data.append("type_document", form.type_document);
     data.append("categorie", form.categorie);
-    data.append("chauffeur_ids", form.chauffeur_ids.join(","));
+    data.append("destinataire_type", form.destinataire_type);
+    data.append("destinataire_ids", form.destinataire_ids.join(","));
     data.append("file", form.file);
 
     setUploading(true);
@@ -143,7 +151,7 @@ export default function Documents() {
       const res = await axios.post(`${API}/documents`, data, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      toast.success(`Document déposé pour ${res.data.created} chauffeur(s)`);
+      toast.success(`Document déposé pour ${res.data.created} destinataire(s)`);
       setDialogOpen(false);
       resetForm();
       fetchData();
@@ -174,7 +182,7 @@ export default function Documents() {
   const filtered = documents.filter((d) => {
     const matchSearch =
       d.titre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (d.chauffeur_nom && d.chauffeur_nom.toLowerCase().includes(searchTerm.toLowerCase()));
+      (d.destinataire_nom && d.destinataire_nom.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchCat = categorieFilter === "all" || d.categorie === categorieFilter;
     return matchSearch && matchCat;
   });
@@ -256,7 +264,7 @@ export default function Documents() {
                 <TableRow>
                   <TableHead>Titre</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Chauffeur</TableHead>
+                  <TableHead>Destinataire</TableHead>
                   <TableHead>Catégorie</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead className="w-32">Actions</TableHead>
@@ -267,7 +275,16 @@ export default function Documents() {
                   <TableRow key={doc.id} data-testid={`document-row-${doc.id}`}>
                     <TableCell className="font-medium">{doc.titre}</TableCell>
                     <TableCell>{TYPE_LABELS[doc.type_document] || doc.type_document}</TableCell>
-                    <TableCell>{doc.chauffeur_nom || "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        {doc.destinataire_type === "client" ? (
+                          <Building2 className="w-3.5 h-3.5 text-[#D9A520]" />
+                        ) : (
+                          <Truck className="w-3.5 h-3.5 text-[#1A4D2E]" />
+                        )}
+                        {doc.destinataire_nom || "-"}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="gap-1">
                         {doc.categorie === "a_signer" ? (
@@ -394,24 +411,59 @@ export default function Documents() {
             </div>
             <div>
               <Label className="flex items-center gap-2 mb-2">
-                <Users className="w-4 h-4" /> Chauffeurs destinataires *
+                <Users className="w-4 h-4" /> Destinataires *
               </Label>
+              <Select
+                value={form.destinataire_type}
+                onValueChange={(v) => setForm({ ...form, destinataire_type: v, destinataire_ids: [] })}
+              >
+                <SelectTrigger className="mb-2" data-testid="document-destinataire-type-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="chauffeur">Chauffeurs</SelectItem>
+                  <SelectItem value="client">Clients</SelectItem>
+                </SelectContent>
+              </Select>
               <ScrollArea className="h-40 border rounded-md p-2">
-                {chauffeurs.length === 0 ? (
-                  <p className="text-sm text-muted-foreground p-2">Aucun chauffeur</p>
+                {form.destinataire_type === "chauffeur" ? (
+                  chauffeurs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-2">Aucun chauffeur</p>
+                  ) : (
+                    chauffeurs.map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={form.destinataire_ids.includes(c.id)}
+                          onCheckedChange={() => toggleDestinataire(c.id)}
+                          data-testid={`document-destinataire-checkbox-${c.id}`}
+                        />
+                        <span className="text-sm">
+                          {c.prenom} {c.nom}
+                          {!c.email && form.categorie === "a_signer" && (
+                            <span className="text-xs text-orange-500 ml-1">(pas d&apos;email)</span>
+                          )}
+                        </span>
+                      </label>
+                    ))
+                  )
+                ) : clients.length === 0 ? (
+                  <p className="text-sm text-muted-foreground p-2">Aucun client</p>
                 ) : (
-                  chauffeurs.map((c) => (
+                  clients.map((c) => (
                     <label
                       key={c.id}
                       className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
                     >
                       <Checkbox
-                        checked={form.chauffeur_ids.includes(c.id)}
-                        onCheckedChange={() => toggleChauffeur(c.id)}
-                        data-testid={`document-chauffeur-checkbox-${c.id}`}
+                        checked={form.destinataire_ids.includes(c.id)}
+                        onCheckedChange={() => toggleDestinataire(c.id)}
+                        data-testid={`document-destinataire-checkbox-${c.id}`}
                       />
                       <span className="text-sm">
-                        {c.prenom} {c.nom}
+                        {c.raison_sociale}
                         {!c.email && form.categorie === "a_signer" && (
                           <span className="text-xs text-orange-500 ml-1">(pas d&apos;email)</span>
                         )}
@@ -422,7 +474,7 @@ export default function Documents() {
               </ScrollArea>
               {form.categorie === "a_signer" && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Un email est requis pour la signature DocuSign de chaque chauffeur.
+                  Un email est requis pour la signature DocuSign de chaque destinataire.
                 </p>
               )}
             </div>

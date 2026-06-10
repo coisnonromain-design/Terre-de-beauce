@@ -1,0 +1,39 @@
+{
+  "summary": "Full backend + frontend e2e testing of new ESPACE CLIENT (login email+password) + 2-sections refactor (En attente de signature / Documents signés & disponibles) + retro-compat. Backend: 35/35 tests passing (19 new test_espace_client.py + 16 updated test_documents_espace.py — legacy assertions on chauffeur_id field were updated to destinataire_id since response shape changed). Frontend: landing page shows 3 cards (admin/chauffeur/client), client credentials generation modal displays email + 12-char password, client login OK with generated password, /client/portal shows BOTH sections with proper badges, Signer button triggers expected DocuSign 401 toast, chauffeur portal Sheet now shows renamed section labels. No critical bugs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin client credentials Dialog & Chauffeur Mes documents Sheet", "issues": ["Radix a11y warning persists: 'Missing Description or aria-describedby for DialogContent' on credentials modal. Same warning previously flagged in iteration_15; non-blocking but should add a DialogDescription / SheetDescription."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_espace_client.py",
+    "/app/backend/tests/test_documents_espace.py",
+    "/app/test_reports/pytest/pytest_espace_client.xml",
+    "/app/test_reports/pytest/pytest_documents_espace.xml"
+  ],
+  "action_items": [
+    "(Cosmetic) Add DialogDescription to the client-credentials Dialog in Clients.jsx and to ChauffeurPortal SheetContent to remove the Radix a11y console warning.",
+    "(Security, carry-over from iteration_15) /api/clients/{id}/generate-credentials and /revoke-credentials are NOT protected by an admin auth dependency — anyone with the URL can generate or revoke any client's password. Add Depends(get_current_admin) on these two routes (and ideally on all /documents/* routes too).",
+    "(Security) /api/documents/client/{id} and /api/documents/chauffeur/{id} are open: any caller can list the documents of any client/chauffeur by guessing the UUID. Recommend scoping the route with Depends(get_current_client) / get_current_chauffeur and asserting the path id matches the token id."
+  ],
+  "critical_code_review_comments": [
+    "Open auth on the new client routes: POST /clients/{id}/generate-credentials, POST /clients/{id}/revoke-credentials, POST /client/login (login OK), and GET /documents/client/{id} are exposed without auth checks. The first two are admin-only and MUST be protected (currently anyone can reset a client's password). The GET /documents/client/{id} should require a client JWT matching the path id.",
+    "POST /client/login does not implement brute-force lockout (5 fail threshold from auth_testing.md). Admin route has it; client login should mirror the same protection.",
+    "server.py >4400 lines — still not split into routers (carry-over).",
+    "PDF upload validation: still no whitelist on content_type / extension — a non-PDF renamed .pdf would pass."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_espace_client.py (new — 19 tests)",
+    "/app/backend/tests/test_documents_espace.py (updated 4 assertions: chauffeur_id -> destinataire_id, ?chauffeur_id filter -> ?destinataire_type+destinataire_id)"
+  ],
+  "success_rate": {"backend": "100% (35/35)", "frontend": "100% (landing 3 cards, /client/login, admin credentials modal, client portal 2 sections, sign 401 toast, chauffeur portal Sheet renamed sections)"},
+  "test_credentials": "Admin r.coisnon@terredebeauce.com / Mennessard03 ; Chauffeur code 43FC7D ; Client test@client.com (password regenerated each run via /generate-credentials)",
+  "seed_data_creation": "Tests create/delete TEST_FE_* and TEST_* prefixed documents through fixtures with teardown. Client test@client.com (id 512b68d0-...) has its acces reactivated at end of test_espace_client.py so subsequent runs/manual checks still work. No orphan data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suites at /app/backend/tests/test_documents_espace.py (16 tests, generalized for new destinataire_* schema) and /app/backend/tests/test_espace_client.py (19 tests covering credentials generation/revocation, client login incl. case-insensitive + 401 paths, client/chauffeur document lists, sign 400/401 guards). DocuSign remains NOT authenticated in preview — /sign returning 401 with 'DocuSign non authentifié' for both chauffeur AND client docs is EXPECTED. The two client-portal sections only render when there is at least one doc in each bucket: seed a_signer + a_consulter docs (via destinataire_type=client) before testing UI. SECURITY ITEMS pending main-agent action: no admin auth on generate/revoke-credentials, no client-token check on /documents/client/{id}, no brute-force lockout on /client/login.",
+  "rca of the issue": "No bug. The 4 initially-failing legacy assertions in test_documents_espace.py were due to the documents response schema migrating from `chauffeur_id` to `destinataire_id`/`destinataire_type` (intentional, generalisation of the feature) — assertions were updated to match the new contract. The 401 on /documents/{id}/sign is the expected DocuSign-not-connected guard, also surfaced as a red toast on the client and chauffeur portals — by design."
+}

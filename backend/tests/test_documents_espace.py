@@ -85,14 +85,16 @@ def uploaded_multi_doc(second_chauffeur_id):
 # ----- POST /api/documents -----
 class TestUpload:
     def test_upload_single_chauffeur(self, uploaded_single_doc):
-        assert uploaded_single_doc["chauffeur_id"] == CHAUFFEUR_ID_1
+        # Updated: response now uses destinataire_id (chauffeur_id legacy in INPUT only)
+        assert uploaded_single_doc["destinataire_id"] == CHAUFFEUR_ID_1
+        assert uploaded_single_doc.get("destinataire_type") == "chauffeur"
         assert uploaded_single_doc["categorie"] == "a_consulter"
         assert uploaded_single_doc["statut"] == "disponible"
         assert uploaded_single_doc["titre"] == "TEST_Single_Doc"
 
     def test_upload_multi_chauffeur(self, uploaded_multi_doc):
         assert len(uploaded_multi_doc) == 2
-        ids = {d["chauffeur_id"] for d in uploaded_multi_doc}
+        ids = {d["destinataire_id"] for d in uploaded_multi_doc}
         assert CHAUFFEUR_ID_1 in ids
         for d in uploaded_multi_doc:
             assert d["categorie"] == "a_signer"
@@ -144,10 +146,15 @@ class TestList:
             assert d["categorie"] == "a_consulter"
 
     def test_filter_by_chauffeur(self, uploaded_single_doc):
-        r = requests.get(f"{API}/documents?chauffeur_id={CHAUFFEUR_ID_1}", timeout=30)
+        # New API uses destinataire_type + destinataire_id; legacy chauffeur_id filter no longer supported
+        r = requests.get(
+            f"{API}/documents?destinataire_type=chauffeur&destinataire_id={CHAUFFEUR_ID_1}",
+            timeout=30,
+        )
         assert r.status_code == 200
         for d in r.json():
-            assert d["chauffeur_id"] == CHAUFFEUR_ID_1
+            assert d["destinataire_id"] == CHAUFFEUR_ID_1
+            assert d["destinataire_type"] == "chauffeur"
 
     def test_chauffeur_list(self, uploaded_single_doc):
         r = requests.get(f"{API}/documents/chauffeur/{CHAUFFEUR_ID_1}", timeout=30)
@@ -155,7 +162,8 @@ class TestList:
         docs = r.json()
         assert any(d["id"] == uploaded_single_doc["id"] for d in docs)
         for d in docs:
-            assert d["chauffeur_id"] == CHAUFFEUR_ID_1
+            assert d["destinataire_id"] == CHAUFFEUR_ID_1
+            assert d["destinataire_type"] == "chauffeur"
             assert "source_key" not in d
             assert "signed_key" not in d
 

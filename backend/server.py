@@ -16,6 +16,8 @@ import io
 import base64
 import csv
 import requests
+import secrets
+import re
 
 # Auth imports
 import bcrypt
@@ -278,7 +280,19 @@ class ClientCreate(ClientBase):
 class Client(ClientBase):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    acces_actif: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Auth Client
+class ClientLogin(BaseModel):
+    email: str
+    password: str
+
+class ClientSession(BaseModel):
+    client_id: str
+    client_nom: str
+    email: str
+    token: str
 
 # Affectation (pour un chantier) - Simplifiée
 class Affectation(BaseModel):
@@ -573,8 +587,9 @@ class DocumentSocial(BaseModel):
     source_key: str
     source_filename: str
     content_type: str = "application/pdf"
-    chauffeur_id: str
-    chauffeur_nom: Optional[str] = None
+    destinataire_type: str = "chauffeur"  # "chauffeur" | "client"
+    destinataire_id: str
+    destinataire_nom: Optional[str] = None
     # statut a_signer: "a_signer"|"en_cours"|"signe" ; a_consulter: "disponible"
     statut: str = "a_signer"
     docusign_envelope_id: Optional[str] = None
@@ -1189,6 +1204,61 @@ async def chauffeur_login(input: ChauffeurLogin):
         chauffeur_nom=f"{chauffeur['prenom']} {chauffeur['nom']}",
         token=token
     )
+
+# ============= AUTH CLIENT =============
+async def get_current_client(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+    payload = decode_jwt_token(credentials.credentials)
+    if not payload or payload.get("type") != "client":
+        raise HTTPException(status_code=401, detail="Token invalide")
+    client = await db.clients.find_one({"id": payload.get("client_id")}, {"_id": 0})
+    if not client or not client.get("acces_actif"):
+        raise HTTPException(status_code=401, detail="Client non trouvé ou accès désactivé")
+    return client
+
+@api_router.post("/client/login", response_model=ClientSession)
+async def client_login(login: ClientLogin):
+    """Connexion client (email + mot de passe)"""
+    client = await db.clients.find_one(
+        {"email": {"$regex": f"^{re.escape(login.email.strip())}$", "$options": "i"}, "acces_actif": True},
+        {"_id": 0},
+    )
+    if not client or not client.get("password_hash"):
+        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+    if not verify_password(login.password, client.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+    token = create_jwt_token({"client_id": client["id"], "email": client.get("email"), "type": "client"})
+    return ClientSession(
+        client_id=client["id"],
+        client_nom=client.get("raison_sociale", ""),
+        email=client.get("email", ""),
+        token=token,
+    )
+
+@api_router.post("/clients/{client_id}/generate-credentials")
+async def generate_client_credentials(client_id: str):
+    """Admin: génère/régénère le mot de passe d'accès d'un client. Renvoie le mot de passe en clair une seule fois."""
+    client = await db.clients.find_one({"id": client_id}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    if not client.get("email"):
+        raise HTTPException(status_code=400, detail="Le client doit avoir une adresse email pour générer un accès")
+    password = secrets.token_urlsafe(9)
+    await db.clients.update_one(
+        {"id": client_id},
+        {"$set": {"password_hash": hash_password(password), "acces_actif": True}},
+    )
+    return {"email": client["email"], "password": password, "acces_actif": True}
+
+@api_router.post("/clients/{client_id}/revoke-credentials")
+async def revoke_client_credentials(client_id: str):
+    """Admin: désactive l'accès d'un client."""
+    client = await db.clients.find_one({"id": client_id}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Client non trouvé")
+    await db.clients.update_one({"id": client_id}, {"$set": {"acces_actif": False}})
+    return {"message": "Accès client désactivé", "acces_actif": False}
 
 # ============= CLIENTS ROUTES =============
 @api_router.get("/clients", response_model=List[Client])
@@ -4059,21 +4129,30 @@ async def get_notifications():
         'notifications': notifications
     }
 
-# ============= DOCUMENTS (Espace documentaire chauffeur) ROUTES =============
+# ============= DOCUMENTS (Espace documentaire chauffeur/client) ROUTES =============
 @api_router.post("/documents")
 async def upload_document(
     titre: str = Form(...),
     type_document: str = Form(...),
     categorie: str = Form(...),
-    chauffeur_ids: str = Form(...),
+    destinataire_type: str = Form("chauffeur"),
+    destinataire_ids: Optional[str] = Form(None),
+    chauffeur_ids: Optional[str] = Form(None),
     file: UploadFile = File(...),
 ):
-    """Admin: dépose un PDF et l'assigne à un ou plusieurs chauffeurs."""
+    """Admin: dépose un PDF et l'assigne à un ou plusieurs chauffeurs ou clients."""
     if categorie not in ("a_signer", "a_consulter"):
         raise HTTPException(status_code=400, detail="Catégorie invalide")
-    ids = [c.strip() for c in chauffeur_ids.split(",") if c.strip()]
+    # Rétro-compatibilité: chauffeur_ids implique destinataire_type=chauffeur
+    raw_ids = destinataire_ids
+    if not raw_ids and chauffeur_ids:
+        raw_ids = chauffeur_ids
+        destinataire_type = "chauffeur"
+    if destinataire_type not in ("chauffeur", "client"):
+        raise HTTPException(status_code=400, detail="Type de destinataire invalide")
+    ids = [c.strip() for c in (raw_ids or "").split(",") if c.strip()]
     if not ids:
-        raise HTTPException(status_code=400, detail="Aucun chauffeur sélectionné")
+        raise HTTPException(status_code=400, detail="Aucun destinataire sélectionné")
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="Fichier vide")
@@ -4092,10 +4171,17 @@ async def upload_document(
     source_key = result.get("path", source_key)
     statut_init = "a_signer" if categorie == "a_signer" else "disponible"
     created = []
-    for cid in ids:
-        chauffeur = await db.chauffeurs.find_one({"id": cid}, {"_id": 0})
-        if not chauffeur:
-            continue
+    for did in ids:
+        if destinataire_type == "chauffeur":
+            dest = await db.chauffeurs.find_one({"id": did}, {"_id": 0})
+            if not dest:
+                continue
+            dest_nom = f"{dest.get('prenom','')} {dest.get('nom','')}".strip()
+        else:
+            dest = await db.clients.find_one({"id": did}, {"_id": 0})
+            if not dest:
+                continue
+            dest_nom = dest.get("raison_sociale", "")
         doc_model = DocumentSocial(
             titre=titre,
             type_document=type_document,
@@ -4103,8 +4189,9 @@ async def upload_document(
             source_key=source_key,
             source_filename=file.filename or f"document.{ext}",
             content_type=content_type,
-            chauffeur_id=cid,
-            chauffeur_nom=f"{chauffeur.get('prenom','')} {chauffeur.get('nom','')}".strip(),
+            destinataire_type=destinataire_type,
+            destinataire_id=did,
+            destinataire_nom=dest_nom,
             statut=statut_init,
             created_at=datetime.now(timezone.utc).isoformat(),
         )
@@ -4112,20 +4199,23 @@ async def upload_document(
         await db.documents.insert_one(doc)
         created.append({k: v for k, v in doc.items() if k != "_id"})
     if not created:
-        raise HTTPException(status_code=404, detail="Aucun chauffeur valide trouvé")
+        raise HTTPException(status_code=404, detail="Aucun destinataire valide trouvé")
     return {"created": len(created), "documents": created}
 
 @api_router.get("/documents")
 async def list_documents(
-    chauffeur_id: Optional[str] = None,
+    destinataire_type: Optional[str] = None,
+    destinataire_id: Optional[str] = None,
     categorie: Optional[str] = None,
     statut: Optional[str] = None,
     type_document: Optional[str] = None,
 ):
     """Admin: liste tous les documents (filtres optionnels)."""
     query = {}
-    if chauffeur_id:
-        query["chauffeur_id"] = chauffeur_id
+    if destinataire_type:
+        query["destinataire_type"] = destinataire_type
+    if destinataire_id:
+        query["destinataire_id"] = destinataire_id
     if categorie:
         query["categorie"] = categorie
     if statut:
@@ -4141,7 +4231,17 @@ async def list_documents(
 async def list_chauffeur_documents(chauffeur_id: str):
     """Chauffeur: liste ses documents."""
     docs = await db.documents.find(
-        {"chauffeur_id": chauffeur_id}, {"_id": 0, "source_key": 0, "signed_key": 0}
+        {"destinataire_type": "chauffeur", "destinataire_id": chauffeur_id},
+        {"_id": 0, "source_key": 0, "signed_key": 0},
+    ).sort("created_at", -1).to_list(1000)
+    return docs
+
+@api_router.get("/documents/client/{client_id}")
+async def list_client_documents(client_id: str):
+    """Client: liste ses documents."""
+    docs = await db.documents.find(
+        {"destinataire_type": "client", "destinataire_id": client_id},
+        {"_id": 0, "source_key": 0, "signed_key": 0},
     ).sort("created_at", -1).to_list(1000)
     return docs
 
@@ -4188,19 +4288,27 @@ async def create_document_signing_url(document_id: str, return_url: str = Query(
     access_token = await get_docusign_access_token()
     if not access_token:
         raise HTTPException(status_code=401, detail="DocuSign non authentifié. L'administrateur doit connecter DocuSign.")
-    chauffeur = await db.chauffeurs.find_one({"id": doc["chauffeur_id"]}, {"_id": 0})
-    if not chauffeur:
-        raise HTTPException(status_code=404, detail="Chauffeur non trouvé")
-    signer_email = chauffeur.get("email")
-    signer_name = f"{chauffeur.get('prenom','')} {chauffeur.get('nom','')}".strip()
+    dtype = doc.get("destinataire_type", "chauffeur")
+    if dtype == "client":
+        recipient = await db.clients.find_one({"id": doc["destinataire_id"]}, {"_id": 0})
+        if not recipient:
+            raise HTTPException(status_code=404, detail="Client non trouvé")
+        signer_email = recipient.get("email")
+        signer_name = recipient.get("raison_sociale") or recipient.get("contact_nom") or signer_email
+    else:
+        recipient = await db.chauffeurs.find_one({"id": doc["destinataire_id"]}, {"_id": 0})
+        if not recipient:
+            raise HTTPException(status_code=404, detail="Chauffeur non trouvé")
+        signer_email = recipient.get("email")
+        signer_name = f"{recipient.get('prenom','')} {recipient.get('nom','')}".strip()
     if not signer_email:
-        raise HTTPException(status_code=400, detail="Le chauffeur n'a pas d'adresse email. L'administrateur doit en renseigner une pour permettre la signature.")
+        raise HTTPException(status_code=400, detail="Le destinataire n'a pas d'adresse email. L'administrateur doit en renseigner une pour permettre la signature.")
     try:
         pdf_bytes, _ = storage_get(doc["source_key"])
     except Exception as e:
         logger.error(f"Storage get error: {str(e)}")
         raise HTTPException(status_code=500, detail="Erreur lors de la récupération du document")
-    client_user_id = doc["chauffeur_id"]
+    client_user_id = doc["destinataire_id"]
     try:
         api_client = ApiClient()
         api_client.host = DOCUSIGN_BASE_URL
