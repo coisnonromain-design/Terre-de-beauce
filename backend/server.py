@@ -630,6 +630,22 @@ def generate_numero_contrat_from_chantier(ref): return ref.replace("CH-", "CT-",
 def generate_numero_releve_from_chantier(ref): return ref.replace("CH-", "RH-", 1)
 def generate_numero_facture_from_chantier(ref): return ref.replace("CH-", "FC-", 1)
 
+def derive_numero(chantier_ref: str, prefix: str):
+    """Dérive un numéro CT-/RH-/FC- depuis une référence chantier CH-XXXX-YYYY.
+    Retourne None si la référence ne suit pas le format (anciens chantiers)."""
+    if chantier_ref and chantier_ref.startswith("CH-"):
+        return chantier_ref.replace("CH-", prefix, 1)
+    return None
+
+async def unique_facture_numero(base: str) -> str:
+    """Garantit l'unicité du numéro de facture (évite les doublons sur un même chantier)."""
+    numero = base
+    n = 2
+    while await db.factures.find_one({"numero": numero}, {"_id": 0}):
+        numero = f"{base}-{n}"
+        n += 1
+    return numero
+
 def generate_numero_facture():
     now = datetime.now()
     return f"FAC-{now.year}-{now.month:02d}-{str(uuid.uuid4())[:8].upper()}"
@@ -1192,6 +1208,7 @@ async def create_chantier(input: ChantierCreate):
     chantier_data = input.model_dump()
     chantier_data['affectations'] = enriched_affectations
     chantier_data['client_nom'] = client_nom
+    chantier_data['reference'] = await generate_numero_chantier()
     chantier_data['tarifs'] = [t.model_dump() if hasattr(t, 'model_dump') else t for t in tarifs]
     
     chantier = Chantier(**chantier_data)
@@ -1227,6 +1244,7 @@ async def update_chantier(chantier_id: str, input: ChantierCreate):
     update_data = input.model_dump()
     update_data['affectations'] = enriched_affectations
     update_data['client_nom'] = client_nom
+    update_data['reference'] = existing.get('reference')
     
     await db.chantiers.update_one({"id": chantier_id}, {"$set": update_data})
     updated = await db.chantiers.find_one({"id": chantier_id}, {"_id": 0})
@@ -1728,6 +1746,7 @@ def generate_recap_pointages_pdf_html(chantier: dict, pointages: list, config: d
         rows_html = '<tr><td colspan="6" style="padding: 30px; text-align: center; color: #666;">Aucun pointage enregistré</td></tr>'
     
     unite_volume = "m³" if chantier.get('transport_type') == 'liquide' else "tonnes"
+    numero_releve = derive_numero(chantier.get('reference', ''), "RH-") or ''
     
     html = f"""
     <!DOCTYPE html>
@@ -1766,7 +1785,8 @@ def generate_recap_pointages_pdf_html(chantier: dict, pointages: list, config: d
                 <p>SIRET: {config.get('siret', '')} | TVA: {config.get('tva_intracommunautaire', '')}</p>
             </div>
             <div class="doc-info">
-                <div class="doc-title">RÉCAPITULATIF<br>DES POINTAGES</div>
+                <div class="doc-title">RELEVÉ DES HEURES</div>
+                {f'<p style="font-size:18px;font-weight:bold;color:#D9A520;margin:5px 0;">N° {numero_releve}</p>' if numero_releve else ''}
                 <p>Document justificatif</p>
             </div>
         </div>
@@ -1902,7 +1922,8 @@ async def get_chantier_pointages_pdf(chantier_id: str):
     
     pdf = HTML(string=html).write_pdf()
     
-    filename = f"recap_pointages_{chantier.get('reference', chantier_id)}.pdf"
+    numero_releve = derive_numero(chantier.get('reference', ''), "RH-") or chantier.get('reference', chantier_id)
+    filename = f"releve_heures_{numero_releve}.pdf"
     
     return Response(
         content=pdf,
@@ -2258,7 +2279,7 @@ async def generer_facture(input: FactureCreate):
     facture = Facture(
         chantier_id=input.chantier_id,
         client_id=client['id'],
-        numero=generate_numero_facture(),
+        numero=await unique_facture_numero(derive_numero(chantier.get('reference', ''), "FC-") or generate_numero_facture()),
         date_emission=datetime.now().strftime("%Y-%m-%d"),
         date_echeance=input.date_echeance,
         lignes=[l.model_dump() for l in lignes],
@@ -2672,8 +2693,10 @@ async def create_contrat_ccpa(input: ContratCCPACreate):
             unite_facturation = "journée effectuée"
     
     # Créer le contrat CCPA pré-rempli
+    chantier_ref = chantier.get('reference', '')
+    numero_contrat = derive_numero(chantier_ref, "CT-") or generate_numero_contrat_ccpa()
     contrat = ContratCCPA(
-        numero_contrat=generate_numero_contrat_ccpa(),
+        numero_contrat=numero_contrat,
         chantier_id=input.chantier_id,
         client_id=client['id'],
         client_nom=client.get('raison_sociale') or '',

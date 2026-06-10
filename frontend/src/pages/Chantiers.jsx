@@ -528,14 +528,21 @@ export default function Chantiers() {
               {/* Informations générales */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="reference">Référence *</Label>
+                  <Label htmlFor="reference">Référence</Label>
                   <Input
                     id="reference"
-                    value={form.reference}
-                    onChange={(e) => setForm({ ...form, reference: e.target.value })}
-                    placeholder="CH-2024-001"
+                    value={editingChantier ? form.reference : "Généré automatiquement"}
+                    disabled
+                    readOnly
+                    className="bg-muted text-muted-foreground"
+                    placeholder="CH-XXXX-2026"
                     data-testid="chantier-reference-input"
                   />
+                  {!editingChantier && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Le numéro (CH-XXXX-2026) est attribué automatiquement et se propage au contrat (CT-), au relevé (RH-) et à la facture (FC-).
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="client">Client *</Label>
