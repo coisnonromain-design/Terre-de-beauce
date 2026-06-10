@@ -1,0 +1,30 @@
+{
+  "summary": "Full backend + frontend e2e validation of the new 4-tabs ESPACE CLIENT (Mes chantiers / Mes contrats / Mes relevés / Mes factures). Backend: 20/21 tests pass, 1 skipped (no signable facture in seed — only 'payee' exists). New regression file test_client_4tabs.py covers GET /client/{id}/{chantiers|contrats|releves|factures}, signature 401 DocuSign guards on /sign-embedded, 400 on /sign-sync without envelope, and 404 on ?signed=true PDFs while document is unsigned. Frontend: ClientPortal now exposes 4 working tabs with all expected data-testids. test@client.com sees 2 chantiers grouped by statut (CH-TEST-2026 planifie + CH-2026-001 en_cours) without download buttons, 2 brouillon contracts CCPA in 'En attente de signature' that trigger the EXPECTED 'DocuSign non authentifié' red toast when Signer is clicked, 1 relevé RH-2026-001 (5 pointages, Le Mérévillois) in 'À visualiser' with a Télécharger button and no Signer, 1 facture FAC-2026-03-9F1B3B29 Payée 7560.00 € TTC in 'À visualiser'. The legacy 'Mes documents' Sheet has been fully removed from the client portal. Regression: /api/clients/{id}/generate-credentials is now protected by admin auth (returns 401 without token — security fix vs iteration_16). Chauffeur portal still has open-documents-btn working (regression OK).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_client_4tabs.py",
+    "/app/test_reports/pytest/pytest_client_4tabs.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Security improvement applied since iteration_16: POST /clients/{id}/generate-credentials now requires admin auth (returns 401 'Non authentifié' without token) — confirmed by direct curl. Verify same protection is applied to /clients/{id}/revoke-credentials.",
+    "Carry-over: GET /api/client/{client_id}/{chantiers|contrats|releves|factures} are not scoped to the logged-in client JWT. Any caller knowing the UUID can list another client's chantiers/contrats/relevés/factures. Recommend adding Depends(get_current_client) and asserting path client_id == token client_id (medium priority — UUIDs are not guessable but it's defense-in-depth).",
+    "Carry-over: /api/client/login has no brute-force lockout (admin login has 5-fail lockout per auth_testing.md).",
+    "server.py keeps growing — still not split into routers."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_client_4tabs.py (new — 21 tests, 20 passed, 1 skipped)"
+  ],
+  "success_rate": {"backend": "100% (20/20 executed, 1 skip)", "frontend": "100% (4 tabs, all data-testids, DocuSign 401 toast verified, legacy Mes documents removed, chauffeur regression OK)"},
+  "test_credentials": "Admin r.coisnon@terredebeauce.com / Mennessard03 ; Chauffeur code 43FC7D ; Client test@client.com / generated per-run via POST /api/clients/512b68d0-2a7c-4e2c-a942-baca41baa7c1/generate-credentials (Bearer admin token required)",
+  "seed_data_creation": "No new seed required. Existing seed for client 512b68d0 (Test Client Tarifs) provides 2 chantiers, 2 contrats CCPA brouillon, 1 relevé (5 pointages), 1 facture payee — all visible in the 4 tabs. No facture in 'emise'/'envoyee' statut, so the /factures/{id}/sign-embedded 401 path could not be exercised on this client (test skipped).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New 4-tabs ClientPortal validated end-to-end. Regression suite at /app/backend/tests/test_client_4tabs.py (21 tests) covers all 4 GET endpoints + signature guards + PDF ?signed param. Combined with test_espace_client.py (auth + documents) and test_documents_espace.py (legacy doc CRUD), the espace-client surface is fully regression-tested. NB: /api/clients/{id}/generate-credentials now REQUIRES admin Bearer token — adapt fixtures if reusing. DocuSign remains NOT authenticated; the /sign-embedded 401 'DocuSign non authentifié' and the corresponding red sonner toast on /client/portal are expected behaviour (not bugs). To exercise the facture /sign-embedded path, seed an 'emise' or 'envoyee' facture for client 512b68d0. The 4 GET endpoints currently lack JWT-client scoping — not blocking but recommended.",
+  "rca of the issue": "No bug found. The single skipped test (facture sign-embedded) is due to seed data — the only facture for the test client is in statut 'payee' (À visualiser bucket), so there is no facture in 'emise'/'envoyee' to trigger the signable path. The very first Playwright run also reported 'tab-chantiers missing' but it was a Playwright timing race (1s wait too short after networkidle for React Tabs hydration). Re-ran with 3.5s wait and every data-testid resolves correctly with all expected counts (4 tabs, 2 chantiers, 2 contrats Signer buttons, 1 relevé download button, 1 facture in À visualiser)."
+}

@@ -2206,6 +2206,42 @@ async def get_client_factures(client_id: str):
     ).sort("date_emission", -1).to_list(1000)
     return factures
 
+@api_router.get("/client/{client_id}/chantiers")
+async def get_client_chantiers(client_id: str):
+    """Tous les chantiers du client (tous statuts)."""
+    chantiers = await db.chantiers.find(
+        {"client_id": client_id}, {"_id": 0}
+    ).sort("date_debut", -1).to_list(1000)
+    return chantiers
+
+@api_router.get("/client/{client_id}/contrats")
+async def get_client_contrats(client_id: str):
+    """Contrats CCPA du client."""
+    contrats = await db.contrats_ccpa.find(
+        {"client_id": client_id}, {"_id": 0, "signed_key": 0}
+    ).sort("created_at", -1).to_list(1000)
+    return contrats
+
+@api_router.get("/client/{client_id}/releves")
+async def get_client_releves(client_id: str):
+    """Relevés de pointages (RH) par chantier du client, pour les chantiers ayant des pointages."""
+    chantiers = await db.chantiers.find({"client_id": client_id}, {"_id": 0}).to_list(1000)
+    releves = []
+    for ch in chantiers:
+        nb = await db.pointages.count_documents({"chantier_id": ch["id"]})
+        if nb > 0:
+            ref = ch.get("reference", "") or ""
+            releves.append({
+                "chantier_id": ch["id"],
+                "numero_releve": ref.replace("CH-", "RH-", 1) if ref.startswith("CH-") else ref,
+                "chantier_reference": ref,
+                "lieu": ch.get("lieu"),
+                "date_debut": ch.get("date_debut"),
+                "date_fin": ch.get("date_fin"),
+                "nb_pointages": nb,
+            })
+    return releves
+
 @api_router.get("/factures/{facture_id}", response_model=Facture)
 async def get_facture(facture_id: str):
     facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
@@ -2649,12 +2685,21 @@ def generate_facture_html(facture: dict, config: dict) -> str:
     return html
 
 @api_router.get("/factures/{facture_id}/pdf")
-async def get_facture_pdf(facture_id: str):
-    """Génère et retourne le PDF de la facture"""
+async def get_facture_pdf(facture_id: str, signed: bool = False):
+    """Génère et retourne le PDF de la facture (ou le PDF signé si signed=true)"""
     # Get facture
     facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
     if not facture:
         raise HTTPException(status_code=404, detail="Facture non trouvée")
+    if signed:
+        key = facture.get("signed_key")
+        if not key:
+            raise HTTPException(status_code=404, detail="Facture signée non disponible")
+        data, ct = storage_get(key)
+        return Response(
+            content=data, media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename=Facture_signe_{facture['numero'].replace('/', '-')}.pdf"},
+        )
     
     # Get entreprise config
     config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
@@ -2889,12 +2934,21 @@ async def delete_contrat_ccpa(contrat_id: str):
     return {"message": "Contrat CCPA supprimé"}
 
 @api_router.get("/contrats-ccpa/{contrat_id}/pdf")
-async def get_contrat_ccpa_pdf(contrat_id: str):
-    """Génère et retourne le PDF du contrat CCPA"""
+async def get_contrat_ccpa_pdf(contrat_id: str, signed: bool = False):
+    """Génère et retourne le PDF du contrat CCPA (ou le PDF signé si signed=true)"""
     # Get contrat
     contrat = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
     if not contrat:
         raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    if signed:
+        key = contrat.get("signed_key")
+        if not key:
+            raise HTTPException(status_code=404, detail="Contrat signé non disponible")
+        data, ct = storage_get(key)
+        return Response(
+            content=data, media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename=Contrat_signe_{contrat['numero_contrat'].replace('/', '-')}.pdf"},
+        )
     
     # Get entreprise config
     config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0})
@@ -3080,6 +3134,60 @@ async def get_docusign_access_token():
         if refreshed:
             return refreshed["access_token"]
     return None
+
+async def docusign_embedded_view(pdf_bytes: bytes, doc_name: str, signer_email: str, signer_name: str, client_user_id: str, return_url: str, existing_envelope_id: Optional[str] = None):
+    """Crée (si besoin) une enveloppe DocuSign avec destinataire intégré (captive) et renvoie (envelope_id, signing_url)."""
+    access_token = await get_docusign_access_token()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié. L'administrateur doit connecter DocuSign.")
+    if not signer_email:
+        raise HTTPException(status_code=400, detail="Le destinataire n'a pas d'adresse email pour la signature.")
+    api_client = ApiClient()
+    api_client.host = DOCUSIGN_BASE_URL
+    api_client.set_default_header("Authorization", f"Bearer {access_token}")
+    envelopes_api = EnvelopesApi(api_client)
+    envelope_id = existing_envelope_id
+    if not envelope_id:
+        document = Document(
+            document_base64=base64.b64encode(pdf_bytes).decode("ascii"),
+            name=doc_name, file_extension="pdf", document_id="1",
+        )
+        sign_here = SignHere(anchor_string="/sn1/", anchor_units="pixels", anchor_x_offset="0", anchor_y_offset="0")
+        signer = Signer(
+            email=signer_email, name=signer_name or signer_email,
+            recipient_id="1", routing_order="1", client_user_id=client_user_id,
+            tabs=Tabs(sign_here_tabs=[sign_here]),
+        )
+        ed = EnvelopeDefinition(
+            email_subject=f"Signature requise: {doc_name}",
+            documents=[document], recipients=Recipients(signers=[signer]), status="sent",
+        )
+        res = envelopes_api.create_envelope(DOCUSIGN_ACCOUNT_ID, envelope_definition=ed)
+        envelope_id = res.envelope_id
+    view = RecipientViewRequest(
+        return_url=return_url, authentication_method="none",
+        email=signer_email, user_name=signer_name or signer_email, client_user_id=client_user_id,
+    )
+    vr = envelopes_api.create_recipient_view(DOCUSIGN_ACCOUNT_ID, envelope_id, recipient_view_request=view)
+    return envelope_id, vr.url
+
+async def docusign_fetch_signed_pdf(envelope_id: str):
+    """Si l'enveloppe est complétée, renvoie (True, pdf_bytes); sinon (False, statut_docusign)."""
+    access_token = await get_docusign_access_token()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié")
+    api_client = ApiClient()
+    api_client.host = DOCUSIGN_BASE_URL
+    api_client.set_default_header("Authorization", f"Bearer {access_token}")
+    envelopes_api = EnvelopesApi(api_client)
+    envelope = envelopes_api.get_envelope(DOCUSIGN_ACCOUNT_ID, envelope_id)
+    if envelope.status != "completed":
+        return False, envelope.status
+    result = envelopes_api.get_document(DOCUSIGN_ACCOUNT_ID, envelope_id, "combined")
+    if isinstance(result, (bytes, bytearray)):
+        return True, bytes(result)
+    with open(result, "rb") as f:
+        return True, f.read()
 
 @api_router.get("/docusign/auth-url")
 async def get_docusign_auth_url(redirect_uri: str):
@@ -4420,6 +4528,119 @@ async def sync_document_signature(document_id: str):
     except Exception as e:
         logger.error(f"DocuSign sync error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
+
+# ============= SIGNATURE INTÉGRÉE CONTRATS & FACTURES (client) =============
+@api_router.post("/contrats-ccpa/{contrat_id}/sign-embedded")
+async def sign_contrat_embedded(contrat_id: str, return_url: str = Query(...)):
+    """Génère l'URL de signature intégrée DocuSign d'un contrat CCPA (signataire = client)."""
+    contrat = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
+    if not contrat:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    if contrat.get("statut") == "signe":
+        raise HTTPException(status_code=400, detail="Ce contrat est déjà signé")
+    client = await db.clients.find_one({"id": contrat.get("client_id")}, {"_id": 0})
+    signer_email = (client.get("email") if client else None) or contrat.get("client_email")
+    signer_name = contrat.get("client_nom") or (client.get("raison_sociale") if client else "")
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0}) or {"raison_sociale": "Terre de Beauce"}
+    try:
+        pdf_bytes = HTML(string=generate_contrat_ccpa_html(contrat, config)).write_pdf()
+        envelope_id, url = await docusign_embedded_view(
+            pdf_bytes, f"Contrat {contrat['numero_contrat']}", signer_email, signer_name,
+            contrat["client_id"], return_url, contrat.get("embedded_envelope_id"),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"DocuSign contrat embedded error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
+    await db.contrats_ccpa.update_one(
+        {"id": contrat_id}, {"$set": {"embedded_envelope_id": envelope_id, "statut": "envoye"}}
+    )
+    return {"signing_url": url, "envelope_id": envelope_id}
+
+@api_router.post("/contrats-ccpa/{contrat_id}/sign-sync")
+async def sync_contrat_signature(contrat_id: str):
+    """Vérifie la signature DocuSign et stocke le PDF signé si complété."""
+    contrat = await db.contrats_ccpa.find_one({"id": contrat_id}, {"_id": 0})
+    if not contrat:
+        raise HTTPException(status_code=404, detail="Contrat non trouvé")
+    envelope_id = contrat.get("embedded_envelope_id")
+    if not envelope_id:
+        raise HTTPException(status_code=400, detail="Aucune enveloppe de signature associée")
+    if contrat.get("signed_key"):
+        return {"statut": "signe", "signe": True}
+    try:
+        done, payload = await docusign_fetch_signed_pdf(envelope_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"DocuSign contrat sync error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
+    if not done:
+        return {"statut": contrat.get("statut"), "docusign_status": payload, "signe": False}
+    signed_key = f"{STORAGE_APP_NAME}/contrats/signed/{uuid.uuid4()}.pdf"
+    storage_put(signed_key, payload, "application/pdf")
+    await db.contrats_ccpa.update_one(
+        {"id": contrat_id},
+        {"$set": {"statut": "signe", "signed_key": signed_key, "date_signature": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"statut": "signe", "signe": True}
+
+@api_router.post("/factures/{facture_id}/sign-embedded")
+async def sign_facture_embedded(facture_id: str, return_url: str = Query(...)):
+    """Génère l'URL de signature intégrée DocuSign d'une facture (signataire = client)."""
+    facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not facture:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    if facture.get("statut") == "signee":
+        raise HTTPException(status_code=400, detail="Cette facture est déjà signée")
+    client = await db.clients.find_one({"id": facture.get("client_id")}, {"_id": 0})
+    signer_email = (client.get("email") if client else None) or facture.get("client_email")
+    signer_name = (client.get("raison_sociale") if client else None) or facture.get("client_raison_sociale") or signer_email
+    config = await db.config.find_one({"id": "config_entreprise"}, {"_id": 0}) or {"raison_sociale": "Terre de Beauce"}
+    try:
+        pdf_bytes = HTML(string=generate_facture_html(facture, config)).write_pdf()
+        envelope_id, url = await docusign_embedded_view(
+            pdf_bytes, f"Facture {facture['numero']}", signer_email, signer_name,
+            facture["client_id"], return_url, facture.get("embedded_envelope_id"),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"DocuSign facture embedded error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
+    await db.factures.update_one(
+        {"id": facture_id}, {"$set": {"embedded_envelope_id": envelope_id, "statut": "envoyee"}}
+    )
+    return {"signing_url": url, "envelope_id": envelope_id}
+
+@api_router.post("/factures/{facture_id}/sign-sync")
+async def sync_facture_signature(facture_id: str):
+    """Vérifie la signature DocuSign et stocke le PDF signé si complété."""
+    facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})
+    if not facture:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+    envelope_id = facture.get("embedded_envelope_id")
+    if not envelope_id:
+        raise HTTPException(status_code=400, detail="Aucune enveloppe de signature associée")
+    if facture.get("signed_key"):
+        return {"statut": "signee", "signe": True}
+    try:
+        done, payload = await docusign_fetch_signed_pdf(envelope_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"DocuSign facture sync error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
+    if not done:
+        return {"statut": facture.get("statut"), "docusign_status": payload, "signe": False}
+    signed_key = f"{STORAGE_APP_NAME}/factures/signed/{uuid.uuid4()}.pdf"
+    storage_put(signed_key, payload, "application/pdf")
+    await db.factures.update_one(
+        {"id": facture_id},
+        {"$set": {"statut": "signee", "signed_key": signed_key, "date_signature": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"statut": "signee", "signe": True}
 
 # Include the router in the main app
 app.include_router(api_router)
