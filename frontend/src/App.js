@@ -26,6 +26,9 @@ import Administrateurs from "@/pages/Administrateurs";
 // Portail Chauffeur
 import ChauffeurPortal from "@/pages/ChauffeurPortal";
 
+// Portail Client
+import ClientLogin from "@/pages/ClientLogin";
+
 function App() {
   return (
     <div className="App">
@@ -44,6 +47,9 @@ function App() {
           <Route path="/chauffeur/portal" element={<ChauffeurPortal />} />
           {/* Redirection ancienne route */}
           <Route path="/chauffeur" element={<Navigate to="/chauffeur/login" replace />} />
+          
+          {/* Authentification Client */}
+          <Route path="/client/login" element={<ClientLogin />} />
           
           {/* ERP Admin (protégé) */}
           <Route path="/admin" element={<Layout />}>
