@@ -2198,6 +2198,14 @@ async def get_factures(statut: Optional[FactureStatus] = None, client_id: Option
     factures = await db.factures.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return factures
 
+@api_router.get("/client/{client_id}/factures", response_model=List[Facture])
+async def get_client_factures(client_id: str):
+    """Factures visibles par le client (hors brouillons)."""
+    factures = await db.factures.find(
+        {"client_id": client_id, "statut": {"$ne": "brouillon"}}, {"_id": 0}
+    ).sort("date_emission", -1).to_list(1000)
+    return factures
+
 @api_router.get("/factures/{facture_id}", response_model=Facture)
 async def get_facture(facture_id: str):
     facture = await db.factures.find_one({"id": facture_id}, {"_id": 0})

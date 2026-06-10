@@ -10,6 +10,8 @@ import {
   FileCheck2,
   Download,
   RefreshCw,
+  FileText,
+  Euro,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,10 +19,18 @@ import { Badge } from "@/components/ui/badge";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+const FACTURE_STATUT = {
+  emise: { label: "Émise", class: "bg-blue-100 text-blue-700 border-blue-200" },
+  envoyee: { label: "Envoyée", class: "bg-indigo-100 text-indigo-700 border-indigo-200" },
+  signee: { label: "Signée", class: "bg-purple-100 text-purple-700 border-purple-200" },
+  payee: { label: "Payée", class: "bg-green-100 text-green-700 border-green-200" },
+};
+
 export default function ClientPortal() {
   const navigate = useNavigate();
   const [client, setClient] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [factures, setFactures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [signingDocId, setSigningDocId] = useState(null);
 
@@ -32,7 +42,7 @@ export default function ClientPortal() {
     }
     const session = JSON.parse(saved);
     setClient(session);
-    fetchDocs(session.client_id);
+    fetchData(session.client_id);
     setLoading(false);
 
     const params = new URLSearchParams(window.location.search);
@@ -45,12 +55,16 @@ export default function ClientPortal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
-  const fetchDocs = async (clientId) => {
+  const fetchData = async (clientId) => {
     try {
-      const res = await axios.get(`${API}/documents/client/${clientId}`);
-      setDocuments(res.data);
+      const [docsRes, facturesRes] = await Promise.all([
+        axios.get(`${API}/documents/client/${clientId}`),
+        axios.get(`${API}/client/${clientId}/factures`),
+      ]);
+      setDocuments(docsRes.data);
+      setFactures(facturesRes.data);
     } catch (error) {
-      console.error("Erreur chargement documents:", error);
+      console.error("Erreur chargement données:", error);
     }
   };
 
@@ -92,7 +106,7 @@ export default function ClientPortal() {
     } catch (e) {
       console.error("Erreur sync DocuSign:", e);
     } finally {
-      fetchDocs(clientId);
+      fetchData(clientId);
     }
   };
 
@@ -143,11 +157,11 @@ export default function ClientPortal() {
           <h1 className="text-3xl font-bold font-['Barlow_Condensed']">Mes documents</h1>
         </div>
 
-        {documents.length === 0 && (
+        {documents.length === 0 && factures.length === 0 && (
           <Card>
             <CardContent className="p-12 text-center text-muted-foreground">
               <FolderArchive className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>Aucun document pour le moment</p>
+              <p>Aucun document ni facture pour le moment</p>
             </CardContent>
           </Card>
         )}
@@ -243,6 +257,50 @@ export default function ClientPortal() {
                             <FileCheck2 className="w-4 h-4" />
                           </Button>
                         )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Mes factures */}
+        {factures.length > 0 && (
+          <div data-testid="client-section-factures">
+            <h2 className="text-sm font-semibold text-[#1A4D2E] uppercase tracking-wide mb-3 flex items-center gap-2">
+              <FileText className="w-4 h-4" /> Mes factures
+            </h2>
+            <div className="space-y-3">
+              {factures.map((f) => (
+                <Card key={f.id} data-testid={`client-facture-${f.id}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{f.numero}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <Badge className={`text-xs border ${(FACTURE_STATUT[f.statut] || {}).class || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                            {(FACTURE_STATUT[f.statut] || {}).label || f.statut}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {f.date_emission} · échéance {f.date_echeance}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="font-bold text-[#1A4D2E] flex items-center gap-0.5">
+                          {(f.montant_ttc || 0).toFixed(2)}
+                          <Euro className="w-3.5 h-3.5" />
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(`${API}/factures/${f.id}/pdf`, "_blank")}
+                          title="Télécharger la facture"
+                          data-testid={`client-download-facture-${f.id}`}
+                        >
+                          <Download className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   </CardContent>

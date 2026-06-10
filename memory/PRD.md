@@ -130,6 +130,9 @@ Construire un ERP complet pour "Terre de Beauce", une société de transport agr
 - ✅ **Réorganisation en 2 sections** (chauffeur ET client)
   - 🟠 « En attente de signature » (documents à signer non signés)
   - 🟢 « Documents signés & disponibles » (documents signés + documents à consulter, téléchargeables/extractibles)
+- ✅ **Factures dans l'espace client**
+  - Section « Mes factures » dans le portail client (consultation + téléchargement PDF)
+  - Endpoint `GET /api/client/{client_id}/factures` (exclut les brouillons)
 
 ## API Endpoints
 
