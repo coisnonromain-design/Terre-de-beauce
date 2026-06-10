@@ -20,6 +20,7 @@ import Planning from "@/pages/Planning";
 import Pointages from "@/pages/Pointages";
 import Factures from "@/pages/Factures";
 import Contrats from "@/pages/Contrats";
+import Documents from "@/pages/Documents";
 import Configuration from "@/pages/Configuration";
 import Administrateurs from "@/pages/Administrateurs";
 
@@ -56,6 +57,7 @@ function App() {
             <Route path="pointages" element={<Pointages />} />
             <Route path="factures" element={<Factures />} />
             <Route path="contrats" element={<Contrats />} />
+            <Route path="documents" element={<Documents />} />
             <Route path="configuration" element={<Configuration />} />
             <Route path="administrateurs" element={<Administrateurs />} />
           </Route>
@@ -69,6 +71,7 @@ function App() {
           <Route path="/pointages" element={<Navigate to="/admin/pointages" replace />} />
           <Route path="/factures" element={<Navigate to="/admin/factures" replace />} />
           <Route path="/contrats" element={<Navigate to="/admin/contrats" replace />} />
+          <Route path="/documents" element={<Navigate to="/admin/documents" replace />} />
           <Route path="/configuration" element={<Navigate to="/admin/configuration" replace />} />
         </Routes>
       </BrowserRouter>

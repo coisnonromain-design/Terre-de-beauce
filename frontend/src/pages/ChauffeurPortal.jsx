@@ -24,6 +24,10 @@ import {
   Check,
   Image,
   Euro,
+  FolderArchive,
+  FileSignature,
+  Download,
+  FileCheck2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -127,6 +131,9 @@ export default function ChauffeurPortal() {
   const [notesFraisOpen, setNotesFraisOpen] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState(null);
   const [photoType, setPhotoType] = useState('pointage'); // 'pointage' ou 'note_frais'
+  const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [documents, setDocuments] = useState([]);
+  const [signingDocId, setSigningDocId] = useState(null);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -182,6 +189,15 @@ export default function ChauffeurPortal() {
     fetchData(session.chauffeur_id);
     checkPendingSync();
     setLoading(false);
+
+    // Gestion du retour de signature DocuSign
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("docusign_return") === "1" && params.get("documentId")) {
+      const docId = params.get("documentId");
+      const event = params.get("event");
+      window.history.replaceState({}, "", "/chauffeur/portal");
+      handleDocusignReturn(docId, event, session.chauffeur_id);
+    }
   }, [navigate]);
 
   const checkPendingSync = async () => {
@@ -217,16 +233,60 @@ export default function ChauffeurPortal() {
 
   const fetchData = async (chauffeurId) => {
     try {
-      const [chantiersRes, pointagesRes, notesRes] = await Promise.all([
+      const [chantiersRes, pointagesRes, notesRes, docsRes] = await Promise.all([
         axios.get(`${API}/chantiers?statut=en_cours`),
         axios.get(`${API}/pointages?chauffeur_id=${chauffeurId}`),
         axios.get(`${API}/notes-frais?chauffeur_id=${chauffeurId}`),
+        axios.get(`${API}/documents/chauffeur/${chauffeurId}`),
       ]);
       setChantiers(chantiersRes.data);
       setPointages(pointagesRes.data);
       setNotesFrais(notesRes.data);
+      setDocuments(docsRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
+    }
+  };
+
+  // Lancer la signature intégrée DocuSign d'un document
+  const handleSignDocument = async (documentId) => {
+    setSigningDocId(documentId);
+    try {
+      const returnUrl = `${window.location.origin}/chauffeur/portal?docusign_return=1&documentId=${documentId}`;
+      const res = await axios.post(
+        `${API}/documents/${documentId}/sign?return_url=${encodeURIComponent(returnUrl)}`
+      );
+      if (res.data.signing_url) {
+        window.location.href = res.data.signing_url;
+      } else {
+        toast.error("Impossible d'ouvrir la signature");
+        setSigningDocId(null);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erreur lors de l'ouverture de la signature");
+      setSigningDocId(null);
+    }
+  };
+
+  const downloadChauffeurDoc = (doc, signed) => {
+    window.open(`${API}/documents/${doc.id}/download${signed ? "?signed=true" : ""}`, "_blank");
+  };
+
+  const handleDocusignReturn = async (documentId, event, chauffeurId) => {
+    setDocumentsOpen(true);
+    try {
+      const res = await axios.post(`${API}/documents/${documentId}/sync`);
+      if (res.data.signe) {
+        toast.success("Document signé avec succès !");
+      } else if (event === "signing_complete") {
+        toast.info("Signature en cours de traitement, veuillez patienter...");
+      } else {
+        toast.info("Signature non finalisée");
+      }
+    } catch (e) {
+      console.error("Erreur sync DocuSign:", e);
+    } finally {
+      fetchData(chauffeurId);
     }
   };
 
@@ -426,6 +486,20 @@ export default function ChauffeurPortal() {
                 <Badge className="ml-1 bg-amber-500 text-xs">{pendingSync}</Badge>
               </Button>
             )}
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className="text-white h-8 relative"
+              onClick={() => setDocumentsOpen(true)}
+              data-testid="open-documents-btn"
+            >
+              <FolderArchive className="w-4 h-4" />
+              {documents.filter(d => d.categorie === 'a_signer' && d.statut !== 'signe').length > 0 && (
+                <Badge className="ml-1 bg-amber-500 text-xs">
+                  {documents.filter(d => d.categorie === 'a_signer' && d.statut !== 'signe').length}
+                </Badge>
+              )}
+            </Button>
             <Button 
               size="sm" 
               variant="ghost" 
@@ -816,6 +890,129 @@ export default function ChauffeurPortal() {
               <Save className="w-4 h-4 mr-2" />
               Enregistrer la note de frais
             </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Sheet Mes Documents */}
+      <Sheet open={documentsOpen} onOpenChange={setDocumentsOpen}>
+        <SheetContent side="bottom" className="h-[85vh] rounded-t-xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2 font-['Barlow_Condensed'] text-2xl">
+              <FolderArchive className="w-6 h-6 text-[#D9A520]" />
+              Mes documents
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="space-y-6 mt-4" data-testid="chauffeur-documents-list">
+            {documents.length === 0 && (
+              <div className="text-center text-muted-foreground py-12">
+                <FolderArchive className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p>Aucun document pour le moment</p>
+              </div>
+            )}
+
+            {/* À signer */}
+            {documents.filter((d) => d.categorie === "a_signer" && d.statut !== "signe").length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-amber-700 uppercase tracking-wide mb-2 flex items-center gap-2">
+                  <FileSignature className="w-4 h-4" /> À signer
+                </h3>
+                <div className="space-y-3">
+                  {documents
+                    .filter((d) => d.categorie === "a_signer" && d.statut !== "signe")
+                    .map((doc) => (
+                      <Card key={doc.id} data-testid={`chauffeur-doc-${doc.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{doc.titre}</p>
+                              <Badge variant="outline" className="mt-1 text-xs">
+                                {doc.statut === "en_cours" ? "Signature commencée" : "À signer"}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 mt-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => downloadChauffeurDoc(doc, false)}
+                            >
+                              <Download className="w-4 h-4 mr-1" /> Aperçu
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="flex-1 bg-[#1A4D2E] hover:bg-[#143d24]"
+                              onClick={() => handleSignDocument(doc.id)}
+                              disabled={signingDocId === doc.id}
+                              data-testid={`sign-document-${doc.id}`}
+                            >
+                              {signingDocId === doc.id ? (
+                                <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                              ) : (
+                                <FileSignature className="w-4 h-4 mr-1" />
+                              )}
+                              {doc.statut === "en_cours" ? "Continuer" : "Signer"}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Signés + À consulter */}
+            {documents.filter((d) => d.statut === "signe" || d.categorie === "a_consulter").length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-[#1A4D2E] uppercase tracking-wide mb-2 flex items-center gap-2">
+                  <FileCheck2 className="w-4 h-4" /> Documents disponibles
+                </h3>
+                <div className="space-y-3">
+                  {documents
+                    .filter((d) => d.statut === "signe" || d.categorie === "a_consulter")
+                    .map((doc) => (
+                      <Card key={doc.id} data-testid={`chauffeur-doc-${doc.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{doc.titre}</p>
+                              {doc.statut === "signe" ? (
+                                <Badge className="mt-1 text-xs bg-green-100 text-green-700 border-green-200 border">
+                                  Signé
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="mt-1 text-xs">À consulter</Badge>
+                              )}
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => downloadChauffeurDoc(doc, false)}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                              {doc.statut === "signe" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-green-700"
+                                  onClick={() => downloadChauffeurDoc(doc, true)}
+                                  data-testid={`download-signed-${doc.id}`}
+                                >
+                                  <FileCheck2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
         </SheetContent>
       </Sheet>

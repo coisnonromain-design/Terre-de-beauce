@@ -1,0 +1,39 @@
+{
+  "summary": "Full backend + frontend e2e testing of the new Espace Documentaire feature (admin + chauffeur PWA) and a regression on chantier numerotation. 16/16 backend pytest cases passed (upload single/multi, list with key-hiding, chauffeur list, download, signed-not-available 404, sign 401 DocuSign expected, sign 400 a_consulter, sync 400 no envelope, delete + verify 404, new chantier reference CH-XXXX-2026). Frontend admin page upload->list->delete works; chauffeur portal opens 'Mes documents' Sheet, shows 'À signer' + 'Documents disponibles' sections, Signer button triggers backend call and displays expected 'DocuSign non authentifié' toast.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin Documents dialog & Chauffeur Mes documents Sheet", "issues": ["Console warning: 'Missing Description or aria-describedby for DialogContent' — accessibility a11y warning on radix Dialog/Sheet. Non-blocking, but should add a DialogDescription (and SheetDescription) for screen readers."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_documents_espace.py",
+    "/app/test_reports/pytest/pytest_documents_espace.xml"
+  ],
+  "action_items": [
+    "Add DialogDescription to the 'Déposer un document' Dialog and SheetDescription to the chauffeur 'Mes documents' Sheet to silence the radix a11y warning (cosmetic).",
+    "Nothing else: feature is functional, all guards behave correctly, storage keys are properly hidden from API responses."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py is very large (>4300 lines). It should be split into routers per domain (documents, chantiers, contrats, factures, docusign) for maintainability — file-size threshold breached.",
+    "POST /api/documents: file extension is naively taken from filename and used to build the storage path; safer to whitelist (only pdf) and validate content_type startswith 'application/pdf' to refuse non-PDF uploads. Currently a .png renamed .pdf would pass.",
+    "DELETE /api/documents/{id} does not delete the underlying object from the object storage (orphan files remain). If the storage key is shared between multiple chauffeur rows (multi-assign), reference-counting would be required before unlinking. Worth tracking.",
+    "/sign endpoint: when DocuSign succeeds creating the envelope but create_recipient_view later fails, the document is left in 'en_cours' state with an orphan envelope_id. Consider rollback or status revert on inner failures.",
+    "No admin/chauffeur authentication enforced on /api/documents/* endpoints (no token check in route). A chauffeur can call /api/documents (admin list) or download any document by id if they guess the UUID. Strongly recommend adding auth dependency / scope checks."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_documents_espace.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% (admin upload/list/delete + chauffeur portal documents sheet + sign 401 toast)"},
+  "test_credentials": "Admin r.coisnon@terredebeauce.com / Mennessard03 ; Chauffeur code 43FC7D (Jean Dupont)",
+  "seed_data_creation": "Tests create/delete TEST_* prefixed documents via fixtures; one TEST_Chantier_Regression chantier is created and deleted to verify CH-XXXX-2026 format. No orphan data persists.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests in /app/backend/tests/test_documents_espace.py cover all documents endpoints; reuse them as regression. DocuSign is intentionally not OAuth-connected in preview — /sign endpoint returning 401 'DocuSign non authentifié' and the resulting chauffeur toast are EXPECTED, NOT a bug. The signed PDF flow (sync + download?signed=true) cannot be fully validated end-to-end until DocuSign is connected by the user. Auth on /api/documents is currently open (no JWT check); flagged as a security item for the main agent.",
+  "rca of the issue": "No bug to RCA — all targeted features work. Only enhancement/security observations are listed under critical_code_review_comments."
+}

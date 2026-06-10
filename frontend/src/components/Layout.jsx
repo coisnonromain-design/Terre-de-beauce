@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileText,
   FileSignature,
+  FolderArchive,
   Settings,
   ChevronRight,
   Menu,
@@ -37,6 +38,7 @@ const navigation = [
   { name: "Pointages", href: "/admin/pointages", icon: ClipboardList },
   { name: "Factures", href: "/admin/factures", icon: FileText },
   { name: "Contrats", href: "/admin/contrats", icon: FileSignature },
+  { name: "Documents", href: "/admin/documents", icon: FolderArchive },
 ];
 
 const getPageTitle = (pathname) => {

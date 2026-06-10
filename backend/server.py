@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, UploadFile, File, Form, Header
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -15,13 +15,14 @@ from enum import Enum
 import io
 import base64
 import csv
+import requests
 
 # Auth imports
 import bcrypt
 from jose import jwt, JWTError
 
 # DocuSign imports
-from docusign_esign import ApiClient, EnvelopesApi, EnvelopeDefinition, Document, Signer, SignHere, Tabs, Recipients
+from docusign_esign import ApiClient, EnvelopesApi, EnvelopeDefinition, Document, Signer, SignHere, Tabs, Recipients, RecipientViewRequest
 
 # PDF generation
 from weasyprint import HTML, CSS
@@ -52,6 +53,51 @@ DOCUSIGN_SECRET_KEY = os.environ.get('DOCUSIGN_SECRET_KEY')
 DOCUSIGN_ACCOUNT_ID = os.environ.get('DOCUSIGN_ACCOUNT_ID')
 DOCUSIGN_AUTH_SERVER = os.environ.get('DOCUSIGN_AUTH_SERVER', 'account-d.docusign.com')
 DOCUSIGN_BASE_URL = os.environ.get('DOCUSIGN_BASE_URL', 'https://demo.docusign.net/restapi')
+
+# ============= OBJECT STORAGE (Emergent) =============
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY")
+STORAGE_APP_NAME = "terredebeauce"
+_storage_key = None
+
+def _init_storage():
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
+    resp.raise_for_status()
+    _storage_key = resp.json()["storage_key"]
+    return _storage_key
+
+def storage_put(path: str, data: bytes, content_type: str) -> dict:
+    global _storage_key
+    key = _init_storage()
+    resp = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data, timeout=120,
+    )
+    if resp.status_code == 403:  # key expired -> re-init once
+        _storage_key = None
+        key = _init_storage()
+        resp = requests.put(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key, "Content-Type": content_type},
+            data=data, timeout=120,
+        )
+    resp.raise_for_status()
+    return resp.json()
+
+def storage_get(path: str):
+    global _storage_key
+    key = _init_storage()
+    resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    if resp.status_code == 403:
+        _storage_key = None
+        key = _init_storage()
+        resp = requests.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key}, timeout=60)
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 # Create the main app without a prefix
 app = FastAPI(title="Terre de Beauce ERP")
@@ -516,6 +562,26 @@ class Contrat(ContratBase):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# ============= DOCUMENTS (Espace documentaire chauffeur) =============
+class DocumentSocial(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    titre: str
+    type_document: str  # "contrat_travail", "fiche_paie", "contrat_commissionnement", "autre"
+    categorie: str  # "a_signer" | "a_consulter"
+    source_key: str
+    source_filename: str
+    content_type: str = "application/pdf"
+    chauffeur_id: str
+    chauffeur_nom: Optional[str] = None
+    # statut a_signer: "a_signer"|"en_cours"|"signe" ; a_consulter: "disponible"
+    statut: str = "a_signer"
+    docusign_envelope_id: Optional[str] = None
+    signed_key: Optional[str] = None
+    date_signature: Optional[str] = None
+    created_at: str = ""
+    created_by: Optional[str] = None
 
 # Dashboard Stats
 class DashboardStats(BaseModel):
@@ -3992,6 +4058,248 @@ async def get_notifications():
         'low': len([n for n in notifications if n.get('priority') == 'low']),
         'notifications': notifications
     }
+
+# ============= DOCUMENTS (Espace documentaire chauffeur) ROUTES =============
+@api_router.post("/documents")
+async def upload_document(
+    titre: str = Form(...),
+    type_document: str = Form(...),
+    categorie: str = Form(...),
+    chauffeur_ids: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Admin: dépose un PDF et l'assigne à un ou plusieurs chauffeurs."""
+    if categorie not in ("a_signer", "a_consulter"):
+        raise HTTPException(status_code=400, detail="Catégorie invalide")
+    ids = [c.strip() for c in chauffeur_ids.split(",") if c.strip()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Aucun chauffeur sélectionné")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Fichier vide")
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "pdf"
+    source_key = f"{STORAGE_APP_NAME}/documents/{uuid.uuid4()}.{ext}"
+    content_type = file.content_type or "application/pdf"
+    try:
+        result = storage_put(source_key, data, content_type)
+    except Exception as e:
+        logger.error(f"Storage upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erreur lors du téléversement du fichier")
+    source_key = result.get("path", source_key)
+    statut_init = "a_signer" if categorie == "a_signer" else "disponible"
+    created = []
+    for cid in ids:
+        chauffeur = await db.chauffeurs.find_one({"id": cid}, {"_id": 0})
+        if not chauffeur:
+            continue
+        doc_model = DocumentSocial(
+            titre=titre,
+            type_document=type_document,
+            categorie=categorie,
+            source_key=source_key,
+            source_filename=file.filename or f"document.{ext}",
+            content_type=content_type,
+            chauffeur_id=cid,
+            chauffeur_nom=f"{chauffeur.get('prenom','')} {chauffeur.get('nom','')}".strip(),
+            statut=statut_init,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        doc = doc_model.model_dump()
+        await db.documents.insert_one(doc)
+        created.append({k: v for k, v in doc.items() if k != "_id"})
+    if not created:
+        raise HTTPException(status_code=404, detail="Aucun chauffeur valide trouvé")
+    return {"created": len(created), "documents": created}
+
+@api_router.get("/documents")
+async def list_documents(
+    chauffeur_id: Optional[str] = None,
+    categorie: Optional[str] = None,
+    statut: Optional[str] = None,
+    type_document: Optional[str] = None,
+):
+    """Admin: liste tous les documents (filtres optionnels)."""
+    query = {}
+    if chauffeur_id:
+        query["chauffeur_id"] = chauffeur_id
+    if categorie:
+        query["categorie"] = categorie
+    if statut:
+        query["statut"] = statut
+    if type_document:
+        query["type_document"] = type_document
+    docs = await db.documents.find(
+        query, {"_id": 0, "source_key": 0, "signed_key": 0}
+    ).sort("created_at", -1).to_list(1000)
+    return docs
+
+@api_router.get("/documents/chauffeur/{chauffeur_id}")
+async def list_chauffeur_documents(chauffeur_id: str):
+    """Chauffeur: liste ses documents."""
+    docs = await db.documents.find(
+        {"chauffeur_id": chauffeur_id}, {"_id": 0, "source_key": 0, "signed_key": 0}
+    ).sort("created_at", -1).to_list(1000)
+    return docs
+
+@api_router.get("/documents/{document_id}/download")
+async def download_document(document_id: str, signed: bool = False):
+    """Télécharge le PDF source (ou signé si signed=true)."""
+    doc = await db.documents.find_one({"id": document_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    key = doc.get("signed_key") if signed else doc.get("source_key")
+    if not key:
+        raise HTTPException(status_code=404, detail="Document signé non disponible" if signed else "Fichier non disponible")
+    try:
+        data, content_type = storage_get(key)
+    except Exception as e:
+        logger.error(f"Storage get error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la récupération du fichier")
+    prefix = "signe_" if signed else ""
+    filename = f"{prefix}{doc.get('source_filename', 'document.pdf')}"
+    return Response(
+        content=data,
+        media_type=content_type or "application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+@api_router.delete("/documents/{document_id}")
+async def delete_document(document_id: str):
+    """Admin: supprime un document."""
+    result = await db.documents.delete_one({"id": document_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    return {"message": "Document supprimé"}
+
+@api_router.post("/documents/{document_id}/sign")
+async def create_document_signing_url(document_id: str, return_url: str = Query(...)):
+    """Chauffeur: génère l'URL de signature intégrée DocuSign pour un document."""
+    doc = await db.documents.find_one({"id": document_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    if doc.get("categorie") != "a_signer":
+        raise HTTPException(status_code=400, detail="Ce document ne nécessite pas de signature")
+    if doc.get("statut") == "signe":
+        raise HTTPException(status_code=400, detail="Ce document est déjà signé")
+    access_token = await get_docusign_access_token()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié. L'administrateur doit connecter DocuSign.")
+    chauffeur = await db.chauffeurs.find_one({"id": doc["chauffeur_id"]}, {"_id": 0})
+    if not chauffeur:
+        raise HTTPException(status_code=404, detail="Chauffeur non trouvé")
+    signer_email = chauffeur.get("email")
+    signer_name = f"{chauffeur.get('prenom','')} {chauffeur.get('nom','')}".strip()
+    if not signer_email:
+        raise HTTPException(status_code=400, detail="Le chauffeur n'a pas d'adresse email. L'administrateur doit en renseigner une pour permettre la signature.")
+    try:
+        pdf_bytes, _ = storage_get(doc["source_key"])
+    except Exception as e:
+        logger.error(f"Storage get error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la récupération du document")
+    client_user_id = doc["chauffeur_id"]
+    try:
+        api_client = ApiClient()
+        api_client.host = DOCUSIGN_BASE_URL
+        api_client.set_default_header("Authorization", f"Bearer {access_token}")
+        envelopes_api = EnvelopesApi(api_client)
+        envelope_id = doc.get("docusign_envelope_id")
+        if not envelope_id:
+            fname = doc.get("source_filename", "document.pdf")
+            ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else "pdf"
+            document = Document(
+                document_base64=base64.b64encode(pdf_bytes).decode("ascii"),
+                name=doc.get("titre", "Document"),
+                file_extension=ext,
+                document_id="1",
+            )
+            sign_here = SignHere(
+                document_id="1",
+                page_number="1",
+                x_position="100",
+                y_position="650",
+            )
+            signer = Signer(
+                email=signer_email,
+                name=signer_name or signer_email,
+                recipient_id="1",
+                routing_order="1",
+                client_user_id=client_user_id,
+                tabs=Tabs(sign_here_tabs=[sign_here]),
+            )
+            envelope_definition = EnvelopeDefinition(
+                email_subject=f"Signature requise: {doc.get('titre','Document')}",
+                documents=[document],
+                recipients=Recipients(signers=[signer]),
+                status="sent",
+            )
+            results = envelopes_api.create_envelope(DOCUSIGN_ACCOUNT_ID, envelope_definition=envelope_definition)
+            envelope_id = results.envelope_id
+            await db.documents.update_one(
+                {"id": document_id},
+                {"$set": {"docusign_envelope_id": envelope_id, "statut": "en_cours"}},
+            )
+        view_request = RecipientViewRequest(
+            return_url=return_url,
+            authentication_method="none",
+            email=signer_email,
+            user_name=signer_name or signer_email,
+            client_user_id=client_user_id,
+        )
+        view_results = envelopes_api.create_recipient_view(
+            DOCUSIGN_ACCOUNT_ID, envelope_id, recipient_view_request=view_request
+        )
+        return {"signing_url": view_results.url, "envelope_id": envelope_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"DocuSign embedded signing error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
+
+@api_router.post("/documents/{document_id}/sync")
+async def sync_document_signature(document_id: str):
+    """Vérifie l'état de signature DocuSign et stocke le PDF signé si complété."""
+    doc = await db.documents.find_one({"id": document_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    envelope_id = doc.get("docusign_envelope_id")
+    if not envelope_id:
+        raise HTTPException(status_code=400, detail="Aucune enveloppe de signature associée")
+    access_token = await get_docusign_access_token()
+    if not access_token:
+        raise HTTPException(status_code=401, detail="DocuSign non authentifié")
+    try:
+        api_client = ApiClient()
+        api_client.host = DOCUSIGN_BASE_URL
+        api_client.set_default_header("Authorization", f"Bearer {access_token}")
+        envelopes_api = EnvelopesApi(api_client)
+        envelope = envelopes_api.get_envelope(DOCUSIGN_ACCOUNT_ID, envelope_id)
+        ds_status = envelope.status
+        if ds_status != "completed":
+            return {"statut": doc.get("statut"), "docusign_status": ds_status, "signe": False}
+        if doc.get("signed_key"):
+            return {"statut": "signe", "docusign_status": ds_status, "signe": True}
+        result = envelopes_api.get_document(DOCUSIGN_ACCOUNT_ID, envelope_id, "combined")
+        if isinstance(result, (bytes, bytearray)):
+            pdf_bytes = bytes(result)
+        else:
+            with open(result, "rb") as f:
+                pdf_bytes = f.read()
+        signed_key = f"{STORAGE_APP_NAME}/documents/signed/{uuid.uuid4()}.pdf"
+        storage_put(signed_key, pdf_bytes, "application/pdf")
+        await db.documents.update_one(
+            {"id": document_id},
+            {"$set": {
+                "statut": "signe",
+                "signed_key": signed_key,
+                "date_signature": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        return {"statut": "signe", "docusign_status": ds_status, "signe": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"DocuSign sync error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur DocuSign: {str(e)}")
 
 # Include the router in the main app
 app.include_router(api_router)
