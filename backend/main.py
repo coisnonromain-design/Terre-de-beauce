@@ -1,9 +1,7 @@
 """
 Terre de Beauce ERP - Main Application (Refactored Architecture)
-
 This file shows the target architecture after full refactoring.
 Currently, server.py remains the production file for stability.
-
 Directory Structure:
 /app/backend/
 ├── server.py              # Current production file
@@ -27,9 +25,9 @@ Directory Structure:
     ├── dashboard.py      # Dashboard & Statistics
     ├── factures.py       # Invoicing (complex logic)
     ├── contrats.py       # CCPA Contracts
-    └── docusign.py       # DocuSign integration
+    ├── docusign.py       # DocuSign integration
+    └── treasury.py       # Module Trésorerie
 """
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -43,7 +41,8 @@ load_dotenv(ROOT_DIR / '.env')
 
 # Import routers
 from routers import tracteurs, equipements, chauffeurs, clients
-from routers import chantiers, pointages, config, export, dashboard, treasury
+from routers import chantiers, pointages, config, export, dashboard
+from routers import treasury
 
 # Create FastAPI app
 app = FastAPI(
@@ -87,7 +86,6 @@ logger = logging.getLogger(__name__)
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "version": "2.0.0"}
-
 
 if __name__ == "__main__":
     import uvicorn
