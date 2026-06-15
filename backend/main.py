@@ -43,7 +43,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 # Import routers
 from routers import tracteurs, equipements, chauffeurs, clients
-from routers import chantiers, pointages, config, export, dashboard
+from routers import chantiers, pointages, config, export, dashboard, treasury
 
 # Create FastAPI app
 app = FastAPI(
@@ -71,6 +71,7 @@ app.include_router(pointages.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(treasury.router, prefix="/api")
 
 # Note: factures, contrats, and docusign routers contain complex logic
 # and will be migrated separately with extensive testing
